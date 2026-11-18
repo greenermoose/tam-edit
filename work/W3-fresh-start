@@ -1,0 +1,48 @@
+W3 FRESH START WITHOUT MICRO'S HISTORY
+
+Date: 2026-11-18
+AI harness: Claude Code 2.1.327
+AI model: claude-opus-5-5
+Commits: the commit that adds this record
+
+
+GUIDANCE
+
+  Fred: "Can we "scorch Earth" tam-edit, and have it start fresh with no
+  git history? I can always look at a clone of micro if I want to see
+  what they are doing. What I'd like is to start over with tam-edit and
+  use the dev branch for development work and the main branch for our
+  tam-edit once we have it ready. ... I mistakenly created a fork for
+  tam-edit when I should have create a brand-new repo so we weren't
+  carrying all the excess micro history that I really don't want in
+  that repo's files."
+
+  Fred: "I accept your proposal. Archive the old fork, go ahead.
+  Replace the local ~/Code/tamlinux/tam-edit with the new repo."
+
+
+DONE
+
+  - The GitHub fork greenermoose/tam-edit was renamed
+    tam-edit-micro-fork and archived, read-only. Nothing is deleted:
+    the Tamlinux versions that pin its commits can still be rebuilt.
+  - This repository was created new, not as a fork, from the tree of
+    the old c11 branch at b1cc5a4e (VERSION 1.0.4), in one commit on
+    dev. master (Go), test, and micro's tags and history stay in the
+    archive.
+  - README, ROADMAP.md, AI_PROVENANCE.md and WHATNOW describe the fresh
+    start and the dev and main branches.
+  - ideas/sources lists micro (a full clone into ~/Code/micro) and
+    tools/pull-references comes from tam-idol. micro is not cloned yet.
+  - No code changed; the version stays 1.0.4.
+
+
+FAILED
+
+  - Nothing.
+
+
+HANDOFF
+
+  - The open findings of reviews/review-001.md, as before. Details in
+    work/WHATNOW.

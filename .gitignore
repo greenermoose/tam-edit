@@ -1,0 +1,9 @@
+# C11 build output
+/build/
+
+# Go builds drop the binary in the repository root
+/tam-edit
+/tam-edit.exe
+
+# Scratch inputs and output for the retained buffer-test generator
+/tools/vscode-tests/

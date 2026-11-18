@@ -1,0 +1,122 @@
+TAM-EDIT
+
+tam-edit is a terminal text editor written in C11 that links only libtam
+(https://github.com/greenermoose/libtam) and the C library. It reproduces
+micro (https://github.com/micro-editor/micro): it began as a fork of
+micro, and micro's behaviour, documentation and runtime files remain its
+reference.
+
+The repository started fresh on 2026-11-18 from the C11 editor at 1.0.4,
+without micro's Git history. The old history, including the Go version
+of tam-edit on its master branch, is archived read-only at
+greenermoose/tam-edit-micro-fork
+(https://github.com/greenermoose/tam-edit-micro-fork). Commit hashes in
+work/history and in the work records before W3 refer to that archive.
+
+Report tam-edit bugs here, at greenermoose/tam-edit
+(https://github.com/greenermoose/tam-edit), not upstream. The Upstream
+section below maps micro's source and documentation to the features
+being ported.
+
+
+BRANCHES AND STATUS
+
+  dev    development work; agents push it freely
+  main   tam-edit once it is ready; created and moved only on Fred's
+         word
+
+ROADMAP.md holds the phase plan and the milestone definitions.
+
+Version 1.0.3 (Milestone 5) completes the Phase 7 parity gate: full parity
+audit (docs/PARITY_AUDIT.md), 57 ported VSCode/micro buffer corpus tests,
+large-file/long-line/many-cursor/many-split stress tests, ASan+UBSan fuzz
+harnesses (make fuzz), Section 8 performance verification, man page
+(docs/tam-edit.1) and desktop entry (data/tam-edit.desktop), and libc-only
+linkage.
+
+
+VERSIONING
+
+tam-edit follows semantic versioning, and while it is below 1.0.0 the
+minor number names a milestone: 0.1.0 is the first daily-usable editor,
+0.2.0 is views and configuration, and 1.0.0 is reserved for the parity gate
+with micro. VERSION at the repository root is the only source (read by the Makefile); tam-edit --version
+prints it next to the libtam version. The milestone table and the bump
+rules are in ROADMAP.md (Milestones and Versions).
+
+
+WHAT TAM-EDIT CHANGES FROM MICRO
+
+- The binary and command name are tam-edit.
+- In the Go reference (archived), configuration comes from
+  TAM_EDIT_CONFIG_HOME, then $XDG_CONFIG_HOME/tam-edit, then
+  ~/.config/tam-edit. It never falls back to an existing micro
+  configuration directory.
+- The Go reference accepts TAM_EDIT_TRUECOLOR alongside MICRO_TRUECOLOR,
+  which still works because it describes the terminal rather than the
+  configuration.
+- Go-reference Lua plugins may import tam-edit/* as well as micro/*.
+- The reference toolchain is pinned in mise.toml; Go is optional for C11
+  work.
+- The C11 editor is C only and leaves out Go, tcell, Lua plugins,
+  the plugin manager and the embedded terminal, which are v1 non-goals in
+  ROADMAP.md.
+
+
+BUILDING
+
+Requires a C11 compiler, make, pkg-config and libtam 0.7.0 or later.
+
+  make                 # build/tam-edit
+  make test            # unit tests
+  make check-deps      # fail if anything other than libc is linked
+  make install PREFIX=$HOME/.local/dev
+  make uninstall
+
+Run it as tam-edit FILE. PREFIX defaults to $HOME/.local/dev and the
+install targets respect DESTDIR. If libtam is outside pkg-config's search
+path, add its pkgconfig directory to PKG_CONFIG_PATH.
+
+The Go editor is no longer in this repository; its source and tests are
+on master in the archive. Syntax definitions, colorschemes, and help
+pages remain in runtime/ alongside the embedded tables in data/.
+
+
+LICENSE
+
+The C11 editor uses GPLv3, as recorded in ROADMAP.md, with the full text in
+LICENSE. libtam (https://github.com/greenermoose/libtam) also uses GPLv3.
+micro's MIT permission notice is kept in LICENSE-MIT and covers the
+runtime data and the other parts that come from micro; LICENSE-THIRD-PARTY
+carries the notices for the third-party libraries micro uses.
+
+
+UPSTREAM
+
+micro's own documentation -- every option, command, keybinding and plugin --
+is at https://micro-editor.github.io and in micro-editor/micro
+(https://github.com/micro-editor/micro). ideas/sources lists a full
+clone of micro under ~/Code/micro, which tools/pull-references keeps up
+to date; runtime/help/ here answers most questions too.
+
+The parts of micro's Go source worth reading before porting a feature:
+
+  Buffer, cursors, undo, save, search:
+    internal/buffer/ -- buffer.go, cursor.go, eventhandler.go, save.go,
+    search.go
+  Commands, keybindings, panes, tabs:
+    internal/action/ -- actions.go, bindings.go, command.go, pane.go
+  Settings, colorschemes, runtime files:
+    internal/config/ -- settings.go, colorscheme.go, rtfiles.go
+  Drawing, statusline, soft wrap:
+    internal/display/
+  Highlighting state machine:
+    pkg/highlight/ -- highlighter.go, parser.go
+  Lua plugin API (deferred):
+    internal/lua/
+  Syntax definitions and colours:
+    runtime/syntax/, runtime/colorschemes/
+
+Bug reports and fixes come from micro's issue tracker
+(https://github.com/micro-editor/micro/issues). git log in the micro clone
+records what was fixed and why.
