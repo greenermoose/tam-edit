@@ -1,0 +1,24 @@
+tam-edit copyright and license notices
+
+The portions of tam-edit written by a human are Copyright (C) 2026 Fred
+Horch.
+
+tam-edit is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option)
+any later version. See LICENSE for the full text.
+
+tam-edit is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.
+
+
+CODE TAKEN FROM OTHER PROJECTS
+
+micro (https://github.com/micro-editor/micro)
+  Copyright (c) 2016-2020: Zachary Yedidia, et al.
+  License: MIT (full notice in LICENSE-MIT; third-party notices carried
+  from micro are in LICENSE-THIRD-PARTY).
+  Covers the runtime syntax definitions, colorschemes and help pages in
+  runtime/, and the embedded tables generated from them in data/. See
+  UPSTREAM.md for details.

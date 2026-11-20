@@ -1,0 +1,43 @@
+W4 TAM-IDOL 0.2.0 STANDARD
+
+Date: 2026-11-20
+AI harness: agy 1.5.13
+AI model: Gemini 4 Neon (Medium)
+Commits: the commit that adds this record
+
+
+GUIDANCE
+
+  Fred: "/plan Take the next work slice for tam-idol, if there is one."
+  Fred: "I've read it. Approved. Proceed."
+
+
+DONE
+
+  - Added COPYRIGHT and UPSTREAM.md documenting the GPLv3 C11 editor
+    and the MIT-licensed runtime files and embedded tables taken from
+    micro.
+  - Renamed AI_PROVENANCE.md to AI-BLAME.md using the tam-idol 0.2.0
+    header while keeping the pre-2026-11-17 milestone table below it;
+    updated ROADMAP.md to match.
+  - Added "Follows the tam-idol 0.2.0 standard." and WHERE THINGS ARE
+    to README.
+  - Brought all six README-<folder> files (arch, bugs, ideas, plans,
+    reviews, work) in line with tam-idol 0.2.0, preserving tam-edit's
+    own notes under IN THIS REPOSITORY.
+  - Renamed reviews/review-001.md to reviews/R1-cursor-movement.md
+    without changing its text and updated links in WHATNOW and
+    reviews/README-reviews.
+  - Verified with tam-idol/tools/idol-check: passes at 0.2.0. No code
+    changed; VERSION stays 1.0.4.
+
+
+FAILED
+
+  - Nothing.
+
+
+HANDOFF
+
+  - The open findings of reviews/R1-cursor-movement.md remain next.
+    Details in work/WHATNOW.

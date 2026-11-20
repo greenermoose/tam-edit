@@ -18,6 +18,8 @@ Report tam-edit bugs here, at greenermoose/tam-edit
 section below maps micro's source and documentation to the features
 being ported.
 
+Follows the tam-idol 0.2.0 standard.
+
 
 BRANCHES AND STATUS
 
@@ -80,6 +82,29 @@ path, add its pkgconfig directory to PKG_CONFIG_PATH.
 The Go editor is no longer in this repository; its source and tests are
 on master in the archive. Syntax definitions, colorschemes, and help
 pages remain in runtime/ alongside the embedded tables in data/.
+
+
+WHERE THINGS ARE
+
+  src/                  C11 editor source
+  data/                 embedded syntax, colorscheme and help tables
+  runtime/              micro syntax, colorscheme and help source files
+  tests/                unit, buffer, stress, PTY and fuzz tests
+  tools/                helper and converter scripts (pull-references)
+  docs/                 parity audit and man page
+  arch/                 architecture notes (tam-edit.md)
+  bugs/                 defect records
+  ideas/                ideas from reference projects (micro.md, sources)
+  plans/                phase work plans
+  reviews/              code reviews (R1-cursor-movement.md)
+  work/                 WHATNOW (read it first), W records, history/
+  ROADMAP.md            milestones, phases and open decisions
+  UPSTREAM.md           code and runtime data taken from micro
+  AI-BLAME.md           how AI work is recorded here
+  COPYRIGHT             copyright and license notices
+  LICENSE               GNU General Public License, version 3
+  LICENSE-MIT           micro's MIT license notice
+  LICENSE-THIRD-PARTY   third-party notices carried from micro
 
 
 LICENSE

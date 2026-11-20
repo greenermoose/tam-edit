@@ -568,8 +568,9 @@ blocking calls in the event loop, and every external command has a deadline.
 - **Plugin path after v1.** Bundled Lua, a new C ABI, or no scripting at all.
   This is deliberately unresolved.
 - **Public provenance.** Settled on 2026-11-17: tam-edit carries
-  `AI_PROVENANCE.md` and `work/` records like every Tamlinux repository;
-  the earlier `docs/ai/` records are in `work/history/`.
+  `AI-BLAME.md` (formerly `AI_PROVENANCE.md`) and `work/` records like
+  every Tamlinux repository; the earlier `docs/ai/` records are in
+  `work/history/`.
 
 ## 10. Definition of done
 
