@@ -3,8 +3,7 @@
 This file says how tam-edit records which AI did what: which harness and
 model did each piece of work, what it was asked, and which commits came
 of it. The repository follows the
-[Tamlinux AI provenance standard](https://github.com/greenermoose/tamlinux/blob/main/docs/ai-provenance-standard.md);
-"blame" is our newer word for the same thing.
+[Tamlinux AI blame standard](https://github.com/greenermoose/tamlinux/blob/main/work/ai-blame-standard.md).
 
 Work is handed from session to session in `work/`, as `work/README-work`
 describes:
@@ -35,7 +34,7 @@ history this record describes, and every commit hash in `work/history/`, is
 archived at [greenermoose/tam-edit-micro-fork](https://github.com/greenermoose/tam-edit-micro-fork).
 micro's notices are kept in `LICENSE-MIT` and `LICENSE-THIRD-PARTY`.
 
-Records follow the public [AI provenance standard](https://github.com/greenermoose/tamlinux/blob/main/docs/ai-provenance-standard.md).
+Records follow the public [AI blame standard](https://github.com/greenermoose/tamlinux/blob/main/work/ai-blame-standard.md).
 Each [session record](work/history/README.md) describes the prompts, authorship
 boundary and verification. Transcripts are retained privately by the author.
 
