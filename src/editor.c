@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <wctype.h>
 
 /* -------------------------------------------------------------------------- */
 /* Document storage                                                           */
@@ -539,7 +540,7 @@ static void touch(editor_t *ed)
 {
     ed->dirty = true;
     ed->message[0] = '\0';
-    editor_sync_to_active(ed);
+    editor_ensure_cursor_visible(ed);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -620,6 +621,130 @@ void editor_set_active_view(editor_t *ed, view_t *v)
         ed->tabs.tabs[ed->tabs.active]->active_view = v;
     }
     editor_sync_from_active(ed);
+}
+
+void view_ensure_cursor_visible(view_t *v, const config_t *cfg)
+{
+    if (v == NULL || v->buf == NULL || cfg == NULL || v->w <= 1 || v->h <= 1) {
+        return;
+    }
+    buffer_t *b = v->buf;
+
+    int text_rows = v->h > 1 ? v->h - 1 : 1;
+    int tabsize = cfg->tabsize > 0 ? cfg->tabsize : 4;
+
+    int gw = 0;
+    if (cfg->ruler) {
+        gw = 4;
+        if (b->doc.count >= 1000) gw = 5;
+        if (b->doc.count >= 10000) gw = 6;
+        if (gw >= v->w / 2) gw = 0;
+    }
+    int text_cols = v->w - gw;
+    if (text_cols < 1) text_cols = 1;
+
+    int sm = cfg->scrollmargin;
+    if (sm < 0) sm = 0;
+    if (text_rows > 1 && sm * 2 >= text_rows) sm = (text_rows - 1) / 2;
+    size_t smu = (size_t)sm;
+
+    if (!v->softwrap) {
+        if (v->cx_line < v->top_line + smu) {
+            v->top_line = (v->cx_line > smu) ? (v->cx_line - smu) : 0;
+        }
+        if (v->cx_line + smu >= v->top_line + (size_t)text_rows) {
+            v->top_line = v->cx_line + smu - (size_t)text_rows + 1;
+        }
+
+        int cx_cells = 0;
+        if (v->cx_line < b->doc.count) {
+            cx_cells = edit_visual_col(b->doc.lines[v->cx_line],
+                                       b->doc.lens[v->cx_line],
+                                       v->cx_col, tabsize);
+        }
+        if (cx_cells < (int)v->left_col) v->left_col = (size_t)cx_cells;
+        if (cx_cells >= (int)v->left_col + text_cols) {
+            v->left_col = (size_t)(cx_cells - text_cols + 1);
+        }
+    } else {
+        if (v->cx_line < v->top_line + smu) {
+            v->top_line = (v->cx_line > smu) ? (v->cx_line - smu) : 0;
+        }
+        int cur_subline = 0;
+        if (v->cx_line < b->doc.count) {
+            edit_softwrap_loc_to_vloc(b->doc.lines[v->cx_line],
+                                      b->doc.lens[v->cx_line],
+                                      v->cx_col, text_cols, tabsize,
+                                      v->wordwrap, &cur_subline, NULL);
+        }
+        for (;;) {
+            if (v->cx_line < v->top_line) {
+                v->top_line = v->cx_line;
+                break;
+            }
+            size_t vis_row = 0;
+            for (size_t li = v->top_line; li < v->cx_line && li < b->doc.count; li++) {
+                vis_row += edit_softwrap_line_sublines(b->doc.lines[li],
+                                                       b->doc.lens[li],
+                                                       text_cols, tabsize,
+                                                       v->wordwrap);
+                if (vis_row > (size_t)text_rows + smu) break;
+            }
+            vis_row += (size_t)cur_subline;
+            if (vis_row + smu < (size_t)text_rows || v->top_line >= v->cx_line) {
+                break;
+            }
+            v->top_line++;
+        }
+        v->left_col = 0;
+    }
+}
+
+void editor_ensure_cursor_visible(editor_t *ed)
+{
+    if (ed == NULL) return;
+    editor_sync_to_active(ed);
+    if (ed->active_view != NULL) {
+        view_ensure_cursor_visible(ed->active_view, &ed->config);
+        ed->top_line = ed->active_view->top_line;
+        ed->left_col = ed->active_view->left_col;
+    }
+}
+
+static void pane_ensure_cursors_visible(pane_node_t *node, const config_t *cfg)
+{
+    if (node == NULL) return;
+    if (node->type == PANE_LEAF) {
+        view_ensure_cursor_visible(node->view, cfg);
+        return;
+    }
+    pane_ensure_cursors_visible(node->child1, cfg);
+    pane_ensure_cursors_visible(node->child2, cfg);
+}
+
+void editor_layout(editor_t *ed, int rows, int cols)
+{
+    if (ed == NULL) return;
+    if (rows < 4) rows = 4;
+    if (cols < 2) cols = 2;
+
+    bool show_tabbar = (ed->config.tabbar == TABBAR_ON) ||
+                       (ed->config.tabbar == TABBAR_AUTO && ed->tabs.count > 1);
+    int content_top = show_tabbar ? 1 : 0;
+    int bottom_prompt_row = rows - 2;
+    int content_height = bottom_prompt_row - content_top;
+    if (content_height < 1) content_height = 1;
+
+    editor_sync_to_active(ed);
+    if (ed->tabs.count > 0 && ed->tabs.active < ed->tabs.count) {
+        tab_t *cur_tab = ed->tabs.tabs[ed->tabs.active];
+        pane_layout(cur_tab->root, 0, content_top, cols, content_height);
+        pane_ensure_cursors_visible(cur_tab->root, &ed->config);
+        if (ed->active_view != NULL) {
+            ed->top_line = ed->active_view->top_line;
+            ed->left_col = ed->active_view->left_col;
+        }
+    }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1421,6 +1546,21 @@ static void delete_single(editor_t *ed)
     editor_raw_remove(ed, ed->cx_line, runes, 1);
 }
 
+static bool loc_lt(loc_t a, loc_t b)
+{
+    return (a.line < b.line) || (a.line == b.line && a.col < b.col);
+}
+
+static loc_t loc_translate(loc_t p, loc_t old_start, loc_t old_end, loc_t new_end)
+{
+    if (loc_lt(p, old_start)) return p;
+    if (loc_lt(p, old_end))   return new_end;
+    if (p.line == old_end.line) {
+        return (loc_t){new_end.line, new_end.col + (p.col - old_end.col)};
+    }
+    return (loc_t){new_end.line + (p.line - old_end.line), p.col};
+}
+
 static void multi_edit_apply(editor_t *ed, mc_op_kind_t op,
                              uint32_t cp, const char *text, size_t len)
 {
@@ -1450,25 +1590,73 @@ static void multi_edit_apply(editor_t *ed, mc_op_kind_t op,
         cursor_clamp(ed);
 
         size_t lines_before = ed->doc.count;
-        size_t ref_line = ed->cx_line;
-        size_t ref_col = ed->cx_col;
-        if (ed->sel.active) {
-            loc_t ss, se;
+        loc_t orig = {ed->cx_line, ed->cx_col};
+        size_t orig_line_runes = (orig.line < ed->doc.count)
+                                 ? edit_line_runes(ed->doc.lines[orig.line], ed->doc.lens[orig.line])
+                                 : 0;
+        bool had_sel = ed->sel.active;
+        loc_t ss = orig, se = orig;
+        if (had_sel) {
             selection_get_range(ed, &ss, &se);
-            ref_line = ss.line;
-            ref_col = ss.col;
         }
-        size_t ref_line_runes = (ref_line < ed->doc.count)
-                                ? edit_line_runes(ed->doc.lines[ref_line], ed->doc.lens[ref_line])
-                                : 0;
+        bool ovr_replaced = false;
+        if (op == MC_OP_CODEPOINT && ed->config.overwrite) {
+            if (had_sel) {
+                size_t se_runes = (se.line < ed->doc.count)
+                                  ? edit_line_runes(ed->doc.lines[se.line], ed->doc.lens[se.line])
+                                  : 0;
+                ovr_replaced = (se.col < se_runes);
+            } else {
+                ovr_replaced = (orig.col < orig_line_runes);
+            }
+        }
 
         switch (op) {
-        case MC_OP_CODEPOINT: insert_codepoint_single(ed, cp); break;
-        case MC_OP_TEXT:      insert_text_single(ed, text, len); break;
-        case MC_OP_NEWLINE:   insert_newline_single(ed); break;
+        case MC_OP_CODEPOINT:        insert_codepoint_single(ed, cp); break;
+        case MC_OP_TEXT:             insert_text_single(ed, text, len); break;
+        case MC_OP_NEWLINE:          insert_newline_single(ed); break;
         case MC_OP_BACKSPACE:        backspace_single(ed); break;
         case MC_OP_DELETE:           delete_single(ed); break;
         case MC_OP_DELETE_WORD_LEFT: delete_word_left_single(ed); break;
+        }
+
+        loc_t new_end = {ed->cx_line, ed->cx_col};
+        loc_t old_start = orig;
+        loc_t old_end = orig;
+
+        if (had_sel) {
+            old_start = ss;
+            old_end = se;
+            if (ovr_replaced) {
+                old_end.col += 1;
+            }
+        } else {
+            switch (op) {
+            case MC_OP_CODEPOINT:
+                old_start = orig;
+                old_end = ovr_replaced ? (loc_t){orig.line, orig.col + 1} : orig;
+                break;
+            case MC_OP_TEXT:
+            case MC_OP_NEWLINE:
+                old_start = orig;
+                old_end = orig;
+                break;
+            case MC_OP_BACKSPACE:
+            case MC_OP_DELETE_WORD_LEFT:
+                old_start = new_end;
+                old_end = orig;
+                break;
+            case MC_OP_DELETE:
+                old_start = orig;
+                if (orig.col < orig_line_runes) {
+                    old_end = (loc_t){orig.line, orig.col + 1};
+                } else if (orig.line + 1 < lines_before) {
+                    old_end = (loc_t){orig.line + 1, 0};
+                } else {
+                    old_end = orig;
+                }
+                break;
+            }
         }
 
         items[k].c.cx_line  = ed->cx_line;
@@ -1476,37 +1664,16 @@ static void multi_edit_apply(editor_t *ed, mc_op_kind_t op,
         items[k].c.goal_col = ed->goal_col;
         items[k].c.sel      = ed->sel;
 
-        long d_lines = (long)ed->doc.count - (long)lines_before;
-        long d_cols = (d_lines == 0 && ref_line < ed->doc.count)
-                      ? ((long)edit_line_runes(ed->doc.lines[ref_line], ed->doc.lens[ref_line]) - (long)ref_line_runes)
-                      : 0;
-
         for (size_t j = k + 1; j < total; j++) {
-            if (d_lines > 0) {
-                if (items[j].c.cx_line == ref_line) {
-                    items[j].c.cx_line += (size_t)d_lines;
-                    items[j].c.cx_col = (items[j].c.cx_col >= ref_col)
-                                        ? (ed->cx_col + (items[j].c.cx_col - ref_col))
-                                        : items[j].c.cx_col;
-                    items[j].c.goal_col = items[j].c.cx_col;
-                } else if (items[j].c.cx_line > ref_line) {
-                    items[j].c.cx_line += (size_t)d_lines;
-                }
-            } else if (d_lines < 0) {
-                size_t removed_lines = (size_t)(-d_lines);
-                if (items[j].c.cx_line == ref_line + removed_lines) {
-                    items[j].c.cx_line = ref_line;
-                    items[j].c.cx_col += ed->cx_col;
-                    items[j].c.goal_col = items[j].c.cx_col;
-                } else if (items[j].c.cx_line > ref_line + removed_lines) {
-                    items[j].c.cx_line -= removed_lines;
-                } else if (items[j].c.cx_line > ref_line) {
-                    items[j].c.cx_line = ref_line;
-                }
-            } else if (items[j].c.cx_line == ref_line) {
-                long nc = (long)items[j].c.cx_col + d_cols;
-                items[j].c.cx_col = nc < 0 ? 0 : (size_t)nc;
-                items[j].c.goal_col = items[j].c.cx_col;
+            loc_t cur = {items[j].c.cx_line, items[j].c.cx_col};
+            loc_t next = loc_translate(cur, old_start, old_end, new_end);
+            items[j].c.cx_line = next.line;
+            items[j].c.cx_col  = next.col;
+            if (items[j].c.sel.active) {
+                items[j].c.sel.anchor = loc_translate(items[j].c.sel.anchor,
+                                                      old_start, old_end, new_end);
+                items[j].c.sel.cursor = loc_translate(items[j].c.sel.cursor,
+                                                      old_start, old_end, new_end);
             }
         }
     }
@@ -1528,6 +1695,11 @@ static void multi_edit_apply(editor_t *ed, mc_op_kind_t op,
     free(items);
 
     cursor_clamp(ed);
+    ed->goal_col = cursor_goal_col_for(ed, ed->cx_line, ed->cx_col);
+    for (size_t i = 0; i < ed->extra_count; i++) {
+        ed->extra_cursors[i].goal_col = cursor_goal_col_for(
+            ed, ed->extra_cursors[i].cx_line, ed->extra_cursors[i].cx_col);
+    }
     editor_merge_cursors(ed);
     touch(ed);
 }
@@ -1865,6 +2037,46 @@ void editor_spawn_cursor_dir(editor_t *ed, int dir)
     editor_sync_to_active(ed);
 }
 
+bool edit_is_space_char(uint32_t cp)
+{
+    if (cp < 0x80) {
+        return cp == ' ' || cp == '\t' || cp == '\r' || cp == '\n' ||
+               cp == '\v' || cp == '\f';
+    }
+    if (cp == 0x0085 || cp == 0x00A0 || cp == 0x1680 ||
+        (cp >= 0x2000 && cp <= 0x200A) ||
+        cp == 0x2028 || cp == 0x2029 ||
+        cp == 0x202F || cp == 0x205F || cp == 0x3000) {
+        return true;
+    }
+    return iswspace((wint_t)cp) != 0;
+}
+
+bool edit_is_word_char(uint32_t cp)
+{
+    if (cp == '_') return true;
+    if (cp < 0x80) return isalnum((unsigned char)cp) != 0;
+    if (edit_is_space_char(cp)) return false;
+
+    /* When a UTF-8 LC_CTYPE locale is active, defer to libc's Unicode tables. */
+    if (iswalnum((wint_t)0x00E9) != 0) {
+        return iswalnum((wint_t)cp) != 0;
+    }
+
+    /* Fallback for C/POSIX locale: exclude common Unicode punctuation/symbol blocks. */
+    if ((cp >= 0x00A1 && cp <= 0x00BF && cp != 0x00AA && cp != 0x00B5 && cp != 0x00BA) ||
+        (cp >= 0x2000 && cp <= 0x206F) ||
+        (cp >= 0x2190 && cp <= 0x27BF) ||
+        (cp >= 0x3000 && cp <= 0x303F) ||
+        (cp >= 0xFF01 && cp <= 0xFF0F) ||
+        (cp >= 0xFF1A && cp <= 0xFF20) ||
+        (cp >= 0xFF3B && cp <= 0xFF40) ||
+        (cp >= 0xFF5B && cp <= 0xFF65)) {
+        return false;
+    }
+    return true;
+}
+
 static bool word_bounds_at(const char *line, size_t len, size_t col,
                            size_t *out_sc, size_t *out_ec)
 {
@@ -1875,28 +2087,29 @@ static bool word_bounds_at(const char *line, size_t len, size_t col,
     uint32_t cp = 0;
     size_t b = edit_rune_to_byte(line, len, col);
     tam_utf8_decode(line + b, len - b, &cp);
-    if (cp == ' ' || cp == '\t') {
+    if (edit_is_space_char(cp)) {
         if (col > 0) {
             col--;
             b = edit_rune_to_byte(line, len, col);
             tam_utf8_decode(line + b, len - b, &cp);
         }
-        if (cp == ' ' || cp == '\t') return false;
+        if (edit_is_space_char(cp)) return false;
     }
 
+    bool target_word = edit_is_word_char(cp);
     size_t sc = col, ec = col + 1;
     while (sc > 0) {
         size_t pb = edit_rune_to_byte(line, len, sc - 1);
         uint32_t pcp = 0;
         tam_utf8_decode(line + pb, len - pb, &pcp);
-        if (!(isalnum((unsigned char)pcp) || pcp == '_' || pcp >= 0x80)) break;
+        if (edit_is_space_char(pcp) || edit_is_word_char(pcp) != target_word) break;
         sc--;
     }
     while (ec < runes) {
         size_t nb = edit_rune_to_byte(line, len, ec);
         uint32_t ncp = 0;
         tam_utf8_decode(line + nb, len - nb, &ncp);
-        if (!(isalnum((unsigned char)ncp) || ncp == '_' || ncp >= 0x80)) break;
+        if (edit_is_space_char(ncp) || edit_is_word_char(ncp) != target_word) break;
         ec++;
     }
     *out_sc = sc;

@@ -1,0 +1,56 @@
+W6 CLOSE REMAINING R1 CURSOR MOVEMENT FINDINGS (#7, #6, #8)
+
+Date: 2026-11-22
+AI harness: Antigravity CLI
+AI model: Gemini 4 Neon (Medium)
+Commits: the commit that adds this record
+
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-edit."
+  Fred: "Approved. Proceed."
+  Covered Findings #7, #6, and #8 of reviews/R1-cursor-movement.md.
+
+
+DONE
+
+  - Finding #7 (multi-cursor downstream metadata): replaced ad-hoc
+    d_lines/d_cols shifting in multi_edit_apply (src/editor.c) with
+    unified span-replacement translation (loc_translate) applied to
+    downstream cursors and active selection endpoints, fixing the
+    backspace line-join offset bug. Exported cursor_goal_col_for
+    (src/cursor.h, src/cursor.c) to recompute mode-aware goal_col
+    (softwrap visual X vs. rune column) for primary and extra cursors,
+    and clamped active selection endpoints in cursor_clamp.
+  - Finding #6 (extract scroll clamping from render.c): moved viewport
+    scroll clamping out of render_paint_view into
+    view_ensure_cursor_visible, editor_ensure_cursor_visible, and
+    editor_layout (src/editor.h, src/editor.c). Wired calls across
+    cursor.c, editor.c, search.c, prompt.c, and main.c, and changed
+    render_paint_view / render_paint_panes_recursive (src/render.c) to
+    accept const view_t * / const pane_node_t * so rendering cannot
+    mutate scroll state.
+  - Finding #8 (Unicode-aware word classes): added shared
+    edit_is_space_char and edit_is_word_char helpers (src/editor.h,
+    src/editor.c) using <wctype.h> plus explicit Unicode Zs/Zl/Zp
+    whitespace and C-locale punctuation fallback, and switched cursor.c
+    and word_bounds_at (src/editor.c) to use them.
+  - Added regression tests in tests/test_editor.c
+    (test_multicursor_downstream_metadata, test_scroll_without_render,
+    test_unicode_word_classes), marked #6, #7, #8 fixed in
+    reviews/R1-cursor-movement.md, and bumped VERSION to 1.0.6.
+  - Verified make test, make test-asan, make test-pty (with
+    TAM_EDIT_CONFIG_HOME unset), and make check-deps all passed.
+
+
+FAILED
+
+  - Nothing.
+
+
+HANDOFF
+
+  - All eight findings in reviews/R1-cursor-movement.md are now fixed.
+    Wait for Fred to pick the next direction (or decide open ROADMAP.md
+    section 9 items). See WHATNOW.

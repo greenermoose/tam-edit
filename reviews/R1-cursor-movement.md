@@ -46,18 +46,18 @@ Architecture summary relevant to cursor movement:
 - Depending on invariants (`buffer_new`/load paths), the doc may normally have >=1 line, but if a zero-line state occurs, clamping won't normalize cursors.
 - **Fix:** clamp to `(0,0)` when `count == 0` (and/or enforce the single-empty-line invariant centrally).
 
-### 6. Scroll/cursor-visibility is computed as a render side effect (medium, factoring/correctness risk)
+### 6. Scroll/cursor-visibility is computed as a render side effect (medium, factoring/correctness risk) — **FIXED (W6)**
 - `render_paint_view` mutates `v->top_line`/`v->left_col` to satisfy scrollmargin and keep the cursor visible (`render.c:224-282`), then `render_draw` copies active view scroll back to `ed->top_line/left_col` (`render.c:690-694`).
 - **Effect:** scrolling correctness depends on draw order/frequency; logic is split between movement and rendering; off-screen operations between frames or alternate code paths can observe stale scroll. Softwrap scroll adjustment is iterative and coupled to render-time layout (`text_cols`, `tabsize`).
 - **Fix:** extract `ensure_cursor_visible(view, config, text_area)` and call it after cursor/viewport-affecting changes (and still allow render to be pure w.r.t. logical state except cell output).
 
-### 7. Multi-cursor downstream adjustment is complex and can leave secondary cursor metadata stale (medium)
+### 7. Multi-cursor downstream adjustment is complex and can leave secondary cursor metadata stale (medium) — **FIXED (W6)**
 - `multi_edit_apply` shifts `cx_line/cx_col` (and sometimes `goal_col`) for cursors after each bottom-to-top edit, with special cases for line insert/delete and same-line column delta (`editor.c:1449-1477`).
 - It does **not** generally adjust `sel.anchor/cursor` inside `items[j].c.sel` for shifted extras, nor normalize `goal_col` in all branches (some paths set `goal_col = cx_col` even when softwrap visual-goal semantics matter).
 - **Effect:** after grouped multi-edits, extra-cursor selections (if active) can point at wrong offsets; vertical movement after such edits may use a degraded/stale goal column for affected extras.
 - **Fix:** define a single "translate location/selection by edit delta" helper applied uniformly to cursor and selection endpoints (and recompute/mark goal appropriately), covered by tests for multi-cursor + selection + newline/backspace-join cases.
 
-### 8. Word classification is ASCII-centric and not Unicode-aware (behavioral/quality)
+### 8. Word classification is ASCII-centric and not Unicode-aware (behavioral/quality) — **FIXED (W6)**
 - `is_word_char` returns true for all non-ASCII (`cursor.c:11-16`), and multi-cursor "word at cursor" uses its own `isalnum/_/>=0x80` test (`editor.c:1822-1860`). `is_space_char` only recognizes ASCII space/tab/CR/LF (`cursor.c:18-21`).
 - **Effect:** Unicode punctuation, NBSP, and other separators are treated as "word" characters; word motions/selections differ from typical Unicode word boundaries. This is consistent-ish with the code's simplicity goal but is a notable movement behavior limitation.
 

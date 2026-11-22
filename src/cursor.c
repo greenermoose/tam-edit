@@ -8,18 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-static bool is_word_char(uint32_t cp)
-{
-    if (cp == '_') return true;
-    if (cp < 0x80) return isalnum((unsigned char)cp);
-    return true; /* non-ASCII code points treated as word/identifier characters */
-}
-
-static bool is_space_char(uint32_t cp)
-{
-    return cp == ' ' || cp == '\t' || cp == '\r' || cp == '\n';
-}
-
 static uint32_t char_at(const char *line, size_t len, size_t rune_idx)
 {
     size_t i = 0;
@@ -65,8 +53,18 @@ void cursor_clamp(editor_t *ed)
         return;
     }
     clamp_one(ed, &ed->cx_line, &ed->cx_col);
+    if (ed->sel.active) {
+        clamp_one(ed, &ed->sel.anchor.line, &ed->sel.anchor.col);
+        clamp_one(ed, &ed->sel.cursor.line, &ed->sel.cursor.col);
+    }
     for (size_t i = 0; i < ed->extra_count; i++) {
         clamp_one(ed, &ed->extra_cursors[i].cx_line, &ed->extra_cursors[i].cx_col);
+        if (ed->extra_cursors[i].sel.active) {
+            clamp_one(ed, &ed->extra_cursors[i].sel.anchor.line,
+                      &ed->extra_cursors[i].sel.anchor.col);
+            clamp_one(ed, &ed->extra_cursors[i].sel.cursor.line,
+                      &ed->extra_cursors[i].sel.cursor.col);
+        }
     }
 }
 
@@ -98,21 +96,25 @@ static int softwrap_text_cols(const editor_t *ed)
     return width < 1 ? 1 : width;
 }
 
-static void update_goal_col(editor_t *ed)
+size_t cursor_goal_col_for(const editor_t *ed, size_t line, size_t col)
 {
-    if (ed->active_view != NULL && ed->active_view->softwrap &&
-        ed->cx_line < ed->doc.count) {
+    if (ed != NULL && ed->active_view != NULL && ed->active_view->softwrap &&
+        line < ed->doc.count) {
         int width = softwrap_text_cols(ed);
         int tabsize = ed->config.tabsize > 0 ? ed->config.tabsize : 4;
         int vx = 0;
-        edit_softwrap_loc_to_vloc(ed->doc.lines[ed->cx_line],
-                                  ed->doc.lens[ed->cx_line],
-                                  ed->cx_col, width, tabsize,
+        edit_softwrap_loc_to_vloc(ed->doc.lines[line],
+                                  ed->doc.lens[line],
+                                  col, width, tabsize,
                                   ed->active_view->wordwrap, NULL, &vx);
-        ed->goal_col = (size_t)vx;
-    } else {
-        ed->goal_col = ed->cx_col;
+        return (size_t)vx;
     }
+    return col;
+}
+
+static void update_goal_col(editor_t *ed)
+{
+    ed->goal_col = cursor_goal_col_for(ed, ed->cx_line, ed->cx_col);
 }
 
 static void cursor_move_single(editor_t *ed, long dx, long dy, bool select)
@@ -279,7 +281,7 @@ void cursor_move(editor_t *ed, long dx, long dy, bool select)
         ed->extra_count = n;
         editor_merge_cursors(ed);
     }
-    editor_sync_to_active(ed);
+    editor_ensure_cursor_visible(ed);
 }
 
 static void cursor_home_single(editor_t *ed, bool select)
@@ -292,7 +294,7 @@ static void cursor_home_single(editor_t *ed, bool select)
     size_t first_non_ws = runes;
     for (size_t i = 0; i < runes; i++) {
         uint32_t cp = char_at(line, len, i);
-        if (!is_space_char(cp)) {
+        if (!edit_is_space_char(cp)) {
             first_non_ws = i;
             break;
         }
@@ -321,7 +323,7 @@ void cursor_home(editor_t *ed, bool select)
         ed->extra_count = n;
         editor_merge_cursors(ed);
     }
-    editor_sync_to_active(ed);
+    editor_ensure_cursor_visible(ed);
 }
 
 static void cursor_end_single(editor_t *ed, bool select)
@@ -345,7 +347,7 @@ void cursor_end(editor_t *ed, bool select)
         ed->extra_count = n;
         editor_merge_cursors(ed);
     }
-    editor_sync_to_active(ed);
+    editor_ensure_cursor_visible(ed);
 }
 
 void cursor_page(editor_t *ed, long pages, int text_rows, bool select)
@@ -361,7 +363,7 @@ void cursor_start(editor_t *ed, bool select)
     ed->cx_col = 0;
     ed->goal_col = 0;
     update_selection(ed, select);
-    editor_sync_to_active(ed);
+    editor_ensure_cursor_visible(ed);
 }
 
 void cursor_end_doc(editor_t *ed, bool select)
@@ -370,10 +372,10 @@ void cursor_end_doc(editor_t *ed, bool select)
     if (ed->doc.count > 0) {
         ed->cx_line = ed->doc.count - 1;
         ed->cx_col = cur_line_runes(ed);
-        ed->goal_col = ed->cx_col;
+        update_goal_col(ed);
     }
     update_selection(ed, select);
-    editor_sync_to_active(ed);
+    editor_ensure_cursor_visible(ed);
 }
 
 void cursor_word_left_single(editor_t *ed, bool select)
@@ -393,16 +395,16 @@ void cursor_word_left_single(editor_t *ed, bool select)
     size_t col = ed->cx_col;
 
     /* 1. Skip spaces to the left */
-    while (col > 0 && is_space_char(char_at(line, len, col - 1))) {
+    while (col > 0 && edit_is_space_char(char_at(line, len, col - 1))) {
         col--;
     }
 
     /* 2. Skip word or non-word chars */
     if (col > 0) {
-        bool in_word = is_word_char(char_at(line, len, col - 1));
+        bool in_word = edit_is_word_char(char_at(line, len, col - 1));
         while (col > 0) {
             uint32_t cp = char_at(line, len, col - 1);
-            if (is_space_char(cp) || is_word_char(cp) != in_word) break;
+            if (edit_is_space_char(cp) || edit_is_word_char(cp) != in_word) break;
             col--;
         }
     }
@@ -426,7 +428,7 @@ void cursor_word_left(editor_t *ed, bool select)
         ed->extra_count = n;
         editor_merge_cursors(ed);
     }
-    editor_sync_to_active(ed);
+    editor_ensure_cursor_visible(ed);
 }
 
 static void cursor_word_right_single(editor_t *ed, bool select)
@@ -447,15 +449,15 @@ static void cursor_word_right_single(editor_t *ed, bool select)
     size_t col = ed->cx_col;
 
     /* 1. Skip word or non-word chars */
-    bool in_word = is_word_char(char_at(line, len, col));
+    bool in_word = edit_is_word_char(char_at(line, len, col));
     while (col < runes) {
         uint32_t cp = char_at(line, len, col);
-        if (is_space_char(cp) || is_word_char(cp) != in_word) break;
+        if (edit_is_space_char(cp) || edit_is_word_char(cp) != in_word) break;
         col++;
     }
 
     /* 2. Skip trailing spaces */
-    while (col < runes && is_space_char(char_at(line, len, col))) {
+    while (col < runes && edit_is_space_char(char_at(line, len, col))) {
         col++;
     }
 
@@ -478,7 +480,7 @@ void cursor_word_right(editor_t *ed, bool select)
         ed->extra_count = n;
         editor_merge_cursors(ed);
     }
-    editor_sync_to_active(ed);
+    editor_ensure_cursor_visible(ed);
 }
 
 void cursor_select_all(editor_t *ed)
@@ -489,9 +491,9 @@ void cursor_select_all(editor_t *ed)
     ed->sel.anchor = (loc_t){0, 0};
     ed->cx_line    = ed->doc.count - 1;
     ed->cx_col     = cur_line_runes(ed);
-    ed->goal_col   = ed->cx_col;
+    update_goal_col(ed);
     ed->sel.cursor = (loc_t){ed->cx_line, ed->cx_col};
-    editor_sync_to_active(ed);
+    editor_ensure_cursor_visible(ed);
 }
 
 void cursor_deselect(editor_t *ed)

@@ -200,6 +200,9 @@ void editor_set_message(editor_t *ed, const char *fmt, ...);
 void editor_sync_to_active(editor_t *ed);
 void editor_sync_from_active(editor_t *ed);
 void editor_set_active_view(editor_t *ed, view_t *v);
+void view_ensure_cursor_visible(view_t *v, const config_t *cfg);
+void editor_ensure_cursor_visible(editor_t *ed);
+void editor_layout(editor_t *ed, int rows, int cols);
 
 /* Milestone 2 View, Split and Tab actions */
 bool editor_vsplit(editor_t *ed, const char *path);
@@ -249,6 +252,8 @@ bool editor_undo(editor_t *ed);
 bool editor_redo(editor_t *ed);
 
 /* Line & Rune helpers */
+bool   edit_is_space_char(uint32_t cp);
+bool   edit_is_word_char(uint32_t cp);
 size_t edit_line_runes(const char *line, size_t len);
 size_t edit_rune_to_byte(const char *line, size_t len, size_t col);
 int    edit_visual_col(const char *line, size_t len, size_t col, int tabsize);

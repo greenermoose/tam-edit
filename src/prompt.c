@@ -373,10 +373,12 @@ static void cmd_toggle(editor_t *ed, int argc, char **argv, bool local)
     if (local) {
         if (strcmp(opt, "softwrap") == 0 && ed->active_view) {
             ed->active_view->softwrap = !ed->active_view->softwrap;
+            editor_ensure_cursor_visible(ed);
             editor_set_message(ed, "Local softwrap toggled %s",
                                ed->active_view->softwrap ? "on" : "off");
         } else if (strcmp(opt, "wordwrap") == 0 && ed->active_view) {
             ed->active_view->wordwrap = !ed->active_view->wordwrap;
+            editor_ensure_cursor_visible(ed);
             editor_set_message(ed, "Local wordwrap toggled %s",
                                ed->active_view->wordwrap ? "on" : "off");
         } else if (strcmp(opt, "syntax") == 0 && ed->active_view && ed->active_view->buf) {
@@ -716,7 +718,7 @@ void prompt_execute_command(editor_t *ed, const char *cmd)
                 ed->goal_col = 0;
                 ed->sel.active = false;
                 cursor_clamp(ed);
-                editor_sync_to_active(ed);
+                editor_ensure_cursor_visible(ed);
                 editor_set_message(ed, "Jumped to line %ld", target);
             }
         } else {
@@ -734,7 +736,7 @@ void prompt_execute_command(editor_t *ed, const char *cmd)
             ed->goal_col = 0;
             ed->sel.active = false;
             cursor_clamp(ed);
-            editor_sync_to_active(ed);
+            editor_ensure_cursor_visible(ed);
             editor_set_message(ed, "Jumped to line %zu", ed->cx_line + 1);
         }
     } else if (strcmp(op, "retab") == 0) {
@@ -985,7 +987,7 @@ static void submit_prompt(editor_t *ed)
             ed->goal_col = 0;
             ed->sel.active = false;
             cursor_clamp(ed);
-            editor_sync_to_active(ed);
+            editor_ensure_cursor_visible(ed);
             editor_set_message(ed, "Jumped to line %ld", target);
         }
         break;

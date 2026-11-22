@@ -3,8 +3,9 @@
 
 #include "editor.h"
 
-void  cursor_clamp(editor_t *ed);
-void  cursor_move(editor_t *ed, long dx, long dy, bool select);
+void   cursor_clamp(editor_t *ed);
+size_t cursor_goal_col_for(const editor_t *ed, size_t line, size_t col);
+void   cursor_move(editor_t *ed, long dx, long dy, bool select);
 void  cursor_home(editor_t *ed, bool select);
 void  cursor_end(editor_t *ed, bool select);
 void  cursor_page(editor_t *ed, long pages, int text_rows, bool select);

@@ -252,10 +252,10 @@ static bool handle_mouse_sgr(editor_t *ed, const unsigned char *buf, size_t len,
             editor_remove_all_cursors(ed);
             ed->cx_line  = doc_l;
             ed->cx_col   = rune_col;
-            ed->goal_col = rune_col;
+            ed->goal_col = cursor_goal_col_for(ed, doc_l, rune_col);
             cursor_clamp(ed);
             ed->sel.active = false;
-            editor_sync_to_active(ed);
+            editor_ensure_cursor_visible(ed);
             return true;
         } else if (btn == 32) {
             /* Left drag */
@@ -265,10 +265,10 @@ static bool handle_mouse_sgr(editor_t *ed, const unsigned char *buf, size_t len,
             }
             ed->cx_line  = doc_l;
             ed->cx_col   = rune_col;
-            ed->goal_col = rune_col;
+            ed->goal_col = cursor_goal_col_for(ed, doc_l, rune_col);
             cursor_clamp(ed);
             ed->sel.cursor = (loc_t){ed->cx_line, ed->cx_col};
-            editor_sync_to_active(ed);
+            editor_ensure_cursor_visible(ed);
             return true;
         }
     }
@@ -417,6 +417,7 @@ int main(int argc, char **argv)
         if (g_resized) {
             g_resized = 0;
             tam_tty_size(&tty, &tty.rows, &tty.cols);
+            editor_layout(&ed, tty.rows, tty.cols);
             ren.force_redraw = true;
             need_draw = true;
         }
@@ -434,6 +435,7 @@ int main(int argc, char **argv)
         }
 
         if (need_draw) {
+            editor_layout(&ed, tty.rows, tty.cols);
             render_draw(&ren, &ed, &tty);
             need_draw = false;
         }

@@ -200,7 +200,7 @@ static inline void apply_cell_syntax(const colorscheme_t *cs,
     }
 }
 
-static void render_paint_view(editor_t *ed, view_t *v, grid_t *g,
+static void render_paint_view(editor_t *ed, const view_t *v, grid_t *g,
                               style_t def_style, style_t num_style,
                               style_t cur_num_style, style_t curline_style)
 {
@@ -220,65 +220,6 @@ static void render_paint_view(editor_t *ed, view_t *v, grid_t *g,
     }
     int text_cols = v->w - gw;
     if (text_cols < 1) text_cols = 1;
-
-    /* Vertical scroll clamping with scrollmargin */
-    int sm = ed->config.scrollmargin;
-    if (sm < 0) sm = 0;
-    if (text_rows > 1 && sm * 2 >= text_rows) sm = (text_rows - 1) / 2;
-    size_t smu = (size_t)sm;
-
-    if (!v->softwrap) {
-        if (v->cx_line < v->top_line + smu) {
-            v->top_line = (v->cx_line > smu) ? (v->cx_line - smu) : 0;
-        }
-        if (v->cx_line + smu >= v->top_line + (size_t)text_rows) {
-            v->top_line = v->cx_line + smu - (size_t)text_rows + 1;
-        }
-
-        /* Horizontal scroll clamping */
-        int cx_cells = 0;
-        if (v->cx_line < b->doc.count) {
-            cx_cells = edit_visual_col(b->doc.lines[v->cx_line],
-                                       b->doc.lens[v->cx_line],
-                                       v->cx_col, tabsize);
-        }
-        if (cx_cells < (int)v->left_col) v->left_col = (size_t)cx_cells;
-        if (cx_cells >= (int)v->left_col + text_cols) {
-            v->left_col = (size_t)(cx_cells - text_cols + 1);
-        }
-    } else {
-        /* Softwrap vertical scrolling: ensure current line/subline is visible */
-        if (v->cx_line < v->top_line + smu) {
-            v->top_line = (v->cx_line > smu) ? (v->cx_line - smu) : 0;
-        }
-        int cur_subline = 0;
-        if (v->cx_line < b->doc.count) {
-            edit_softwrap_loc_to_vloc(b->doc.lines[v->cx_line],
-                                      b->doc.lens[v->cx_line],
-                                      v->cx_col, text_cols, tabsize,
-                                      v->wordwrap, &cur_subline, NULL);
-        }
-        for (;;) {
-            if (v->cx_line < v->top_line) {
-                v->top_line = v->cx_line;
-                break;
-            }
-            size_t vis_row = 0;
-            for (size_t li = v->top_line; li < v->cx_line && li < b->doc.count; li++) {
-                vis_row += edit_softwrap_line_sublines(b->doc.lines[li],
-                                                       b->doc.lens[li],
-                                                       text_cols, tabsize,
-                                                       v->wordwrap);
-                if (vis_row > (size_t)text_rows + smu) break;
-            }
-            vis_row += (size_t)cur_subline;
-            if (vis_row + smu < (size_t)text_rows || v->top_line >= v->cx_line) {
-                break;
-            }
-            v->top_line++;
-        }
-        v->left_col = 0;
-    }
 
     style_t hl_style = colorscheme_get(&ed->colorscheme, "hlsearch");
     bool do_hl = (v == ed->active_view && ed->config.hlsearch && ed->search.query[0] != '\0');
@@ -522,7 +463,7 @@ static void render_paint_view(editor_t *ed, view_t *v, grid_t *g,
     }
 }
 
-static void render_paint_panes_recursive(editor_t *ed, pane_node_t *node, grid_t *g,
+static void render_paint_panes_recursive(editor_t *ed, const pane_node_t *node, grid_t *g,
                                          style_t def_style, style_t num_style,
                                          style_t cur_num_style, style_t curline_style)
 {
@@ -692,13 +633,13 @@ void render_draw(renderer_t *ren, editor_t *ed, tam_tty_t *tty)
     editor_sync_to_active(ed);
     if (ed->tabs.count > 0 && ed->tabs.active < ed->tabs.count) {
         tab_t *cur_tab = ed->tabs.tabs[ed->tabs.active];
-        pane_layout(cur_tab->root, 0, content_top, cols, content_height);
+        if (cur_tab->root != NULL &&
+            (cur_tab->root->x != 0 || cur_tab->root->y != content_top ||
+             cur_tab->root->w != cols || cur_tab->root->h != content_height)) {
+            pane_layout(cur_tab->root, 0, content_top, cols, content_height);
+        }
         render_paint_panes_recursive(ed, cur_tab->root, &ren->back,
                                      def_style, num_style, cur_num_style, curline_style);
-        if (ed->active_view != NULL) {
-            ed->top_line = ed->active_view->top_line;
-            ed->left_col = ed->active_view->left_col;
-        }
     }
 
     /* 4. Paint Prompt / Message line and Keybindings footer row */

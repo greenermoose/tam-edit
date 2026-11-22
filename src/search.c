@@ -147,6 +147,7 @@ static void apply_match_cursor(editor_t *ed, size_t line, size_t start_col, size
         ed->sel.cursor = (loc_t){line, start_col};
     }
     cursor_clamp(ed);
+    editor_ensure_cursor_visible(ed);
     ed->search.last_line = ed->cx_line;
     ed->search.last_col = ed->cx_col;
     ed->search.has_match = true;
