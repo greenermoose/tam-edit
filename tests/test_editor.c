@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "cursor.h"
 #include "syntax.h"
 
 #include <tam.h>
@@ -177,12 +178,12 @@ static void test_utf8_edit(void)
     editor_insert_codepoint(&ed, 0x4E2D); /* CJK, three bytes, two cells */
     CHECK(ed.cx_col == 2);
     CHECK(ed.doc.lens[0] == 5);
-    CHECK(edit_visual_col(ed.doc.lines[0], ed.doc.lens[0], 2) == 3);
+    CHECK(edit_visual_col(ed.doc.lines[0], ed.doc.lens[0], 2, 8) == 3);
 
     editor_backspace(&ed);
     CHECK(ed.cx_col == 1);
     CHECK(ed.doc.lens[0] == 2);
-    CHECK(edit_visual_col(ed.doc.lines[0], ed.doc.lens[0], 1) == 1);
+    CHECK(edit_visual_col(ed.doc.lines[0], ed.doc.lens[0], 1, 8) == 1);
 
     editor_backspace(&ed);
     CHECK(ed.cx_col == 0);
@@ -226,15 +227,29 @@ static void test_visual_columns(void)
     size_t len = strlen(line);
 
     CHECK(edit_line_runes(line, len) == 3);
-    CHECK(edit_visual_col(line, len, 0) == 0);
-    CHECK(edit_visual_col(line, len, 1) == 1);
-    CHECK(edit_visual_col(line, len, 2) == 8);
-    CHECK(edit_visual_col(line, len, 3) == 9);
+    CHECK(edit_visual_col(line, len, 0, 8) == 0);
+    CHECK(edit_visual_col(line, len, 1, 8) == 1);
+    CHECK(edit_visual_col(line, len, 2, 8) == 8);
+    CHECK(edit_visual_col(line, len, 3, 8) == 9);
 
-    CHECK(edit_visual_to_rune(line, len, 0) == 0);
-    CHECK(edit_visual_to_rune(line, len, 1) == 1);
-    CHECK(edit_visual_to_rune(line, len, 8) == 2);
-    CHECK(edit_visual_to_rune(line, len, 9) == 3);
+    CHECK(edit_visual_to_rune(line, len, 0, 8) == 0);
+    CHECK(edit_visual_to_rune(line, len, 1, 8) == 1);
+    CHECK(edit_visual_to_rune(line, len, 8, 8) == 2);
+    CHECK(edit_visual_to_rune(line, len, 9, 8) == 3);
+
+    /* Configured tabsize (4 and 2, plus <=0 fallback to 4) */
+    CHECK(edit_visual_col(line, len, 2, 4) == 4);
+    CHECK(edit_visual_col(line, len, 3, 4) == 5);
+    CHECK(edit_visual_to_rune(line, len, 4, 4) == 2);
+    CHECK(edit_visual_to_rune(line, len, 5, 4) == 3);
+
+    CHECK(edit_visual_col(line, len, 2, 2) == 2);
+    CHECK(edit_visual_col(line, len, 3, 2) == 3);
+    CHECK(edit_visual_to_rune(line, len, 2, 2) == 2);
+    CHECK(edit_visual_to_rune(line, len, 3, 2) == 3);
+
+    CHECK(edit_visual_col(line, len, 2, 0) == 4);
+    CHECK(edit_visual_to_rune(line, len, 4, -1) == 2);
 
     CHECK(edit_rune_to_byte(line, len, 0) == 0);
     CHECK(edit_rune_to_byte(line, len, 1) == 1);
@@ -242,6 +257,70 @@ static void test_visual_columns(void)
     CHECK(edit_rune_to_byte(line, len, 3) == 3);
 
     printf("  [PASS] test_visual_columns\n");
+}
+
+static void test_tabmovement_utf8(void)
+{
+    editor_t ed;
+    editor_init(&ed);
+    ed.config.tabmovement = true;
+    ed.config.tabstospaces = true;
+    ed.config.tabsize = 4;
+
+    /* 4 spaces of indent + multi-byte UTF-8 text: tabmovement steps over indent */
+    const char *s1 = "    \xC3\xA9x";
+    editor_raw_insert(&ed, 0, 0, s1, strlen(s1));
+    ed.cx_line = 0;
+    ed.cx_col = 0;
+    editor_move(&ed, 1, 0);
+    CHECK(ed.cx_col == 4);
+    editor_move(&ed, -1, 0);
+    CHECK(ed.cx_col == 0);
+
+    /* Non-ASCII prefix before spaces: must NOT trigger tabmovement */
+    editor_free(&ed);
+    editor_init(&ed);
+    ed.config.tabmovement = true;
+    ed.config.tabstospaces = true;
+    ed.config.tabsize = 4;
+    const char *s2 = "\xC3\xA9    x";
+    editor_raw_insert(&ed, 0, 0, s2, strlen(s2));
+    ed.cx_line = 0;
+    ed.cx_col = 1;
+    editor_move(&ed, 1, 0);
+    CHECK(ed.cx_col == 2);
+
+    editor_free(&ed);
+    printf("  [PASS] test_tabmovement_utf8\n");
+}
+
+static void test_cursor_clamp_empty_doc(void)
+{
+    editor_t ed;
+    editor_init(&ed);
+
+    /* Simulate a zero-line document state with out-of-range cursors */
+    for (size_t i = 0; i < ed.doc.count; i++) free(ed.doc.lines[i]);
+    ed.doc.count = 0;
+
+    ed.cx_line = 5;
+    ed.cx_col = 12;
+    ed.sel.active = true;
+    ed.extra_cursors = calloc(1, sizeof(*ed.extra_cursors));
+    ed.extra_cap = 1;
+    ed.extra_count = 1;
+    ed.extra_cursors[0].cx_line = 3;
+    ed.extra_cursors[0].cx_col = 7;
+    ed.extra_cursors[0].sel.active = true;
+
+    cursor_clamp(&ed);
+    CHECK(ed.cx_line == 0 && ed.cx_col == 0);
+    CHECK(!ed.sel.active);
+    CHECK(ed.extra_cursors[0].cx_line == 0 && ed.extra_cursors[0].cx_col == 0);
+    CHECK(!ed.extra_cursors[0].sel.active);
+
+    editor_free(&ed);
+    printf("  [PASS] test_cursor_clamp_empty_doc\n");
 }
 
 static void test_vertical_goal(void)
@@ -308,6 +387,8 @@ int main(void)
     test_utf8_edit();
     test_newline_and_join();
     test_visual_columns();
+    test_tabmovement_utf8();
+    test_cursor_clamp_empty_doc();
     test_vertical_goal();
     test_save_without_path();
     printf("editor tests passed\n\n");

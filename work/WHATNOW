@@ -3,7 +3,7 @@ WHATNOW
 What tam-edit is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-20, with W4
+Updated: 2026-11-21, with W5
 
 
 STATE
@@ -15,34 +15,30 @@ STATE
   fork of micro, the Go version on master, branches c11 and test) is
   archived read-only at greenermoose/tam-edit-micro-fork. Commit hashes
   in older records, R1-cursor-movement.md included, are in that
-  archive. VERSION reads 1.0.4 (the footer shows it).
+  archive. VERSION reads 1.0.5 (the footer shows it).
 
   All five migration milestones are complete (ROADMAP.md, 1.0.0 on
   2026-11-13): editing, views and configuration, syntax highlighting,
   search, encodings, shell, multi-cursor, the parity audit
   (docs/PARITY_AUDIT.md), fuzzing and packaging. Since then: fixes to
   arrow keys, softwrap boundaries, the softwrap goal column, the version
-  in the footer, and DeleteWordLeft (W2, 61cc02c0).
+  in the footer, DeleteWordLeft (W2, 61cc02c0), and R1 #2/#4/#5 (W5).
 
   reviews/R1-cursor-movement.md, a review of the cursor code, found
-  eight issues. #1 (softwrap goal column after Home/End/word moves,
-  880cbe4e) and #3 (act_delete_word_left multi-cursor and edit pipeline,
-  61cc02c0) are fixed.
+  eight issues. #1 (softwrap goal column, 880cbe4e), #2 (visual column
+  tabsize, W5), #3 (act_delete_word_left, 61cc02c0), #4 (tab-indent
+  byte-vs-rune indexing, W5), and #5 (empty-doc cursor_clamp, W5) are
+  fixed.
 
 
 NEXT
 
-  1. The open findings of reviews/R1-cursor-movement.md, highest impact
-     first:
-     - 2: edit_visual_col and edit_visual_to_rune (src/editor.c) use a
-       fixed tab stop of 8 (EDIT_TABSTOP); rendering uses
-       config.tabsize. Pass the tab size in.
-     - 4: tab-indent stepping in cursor_move_single (src/cursor.c)
-       indexes a line by rune column as if it were a byte offset.
+  1. Remaining open findings of reviews/R1-cursor-movement.md, highest
+     impact first:
      - 7: multi-cursor downstream adjustment can leave secondary cursor
        metadata stale.
-     - 5, 6 and 8: empty-document clamp, scroll computed as a render
-       side effect, ASCII-only word classes.
+     - 6 and 8: scroll computed as a render side effect, ASCII-only word
+       classes.
      Each fix gets a regression test (make test, make test-asan; make
      test-pty for key paths) and a patch bump. Mark each finding fixed
      in the review with its commit.
@@ -56,8 +52,8 @@ NEXT
 
 WAITING FOR FRED
 
-  - Whether to keep going down R1-cursor-movement or start something
-    new.
+  - Whether to keep going down R1-cursor-movement (#7, #6, #8) or start
+    something new.
 
 
 WATCH OUT

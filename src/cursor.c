@@ -53,7 +53,17 @@ static void clamp_one(const editor_t *ed, size_t *line, size_t *col)
 
 void cursor_clamp(editor_t *ed)
 {
-    if (ed->doc.count == 0) return;
+    if (ed->doc.count == 0) {
+        ed->cx_line = 0;
+        ed->cx_col = 0;
+        ed->sel.active = false;
+        for (size_t i = 0; i < ed->extra_count; i++) {
+            ed->extra_cursors[i].cx_line = 0;
+            ed->extra_cursors[i].cx_col = 0;
+            ed->extra_cursors[i].sel.active = false;
+        }
+        return;
+    }
     clamp_one(ed, &ed->cx_line, &ed->cx_col);
     for (size_t i = 0; i < ed->extra_count; i++) {
         clamp_one(ed, &ed->extra_cursors[i].cx_line, &ed->extra_cursors[i].cx_col);
@@ -127,9 +137,10 @@ static void cursor_move_single(editor_t *ed, long dx, long dy, bool select)
         const char *line = ed->doc.lines[ed->cx_line];
         size_t len = ed->doc.lens[ed->cx_line];
         size_t tab = (size_t)ed->config.tabsize;
+        size_t byte_pos = edit_rune_to_byte(line, len, ed->cx_col);
         bool in_indent = true;
-        for (size_t c = 0; c < ed->cx_col && c < len; c++) {
-            if (line[c] != ' ') {
+        for (size_t b = 0; b < byte_pos; b++) {
+            if (line[b] != ' ') {
                 in_indent = false;
                 break;
             }
@@ -140,10 +151,9 @@ static void cursor_move_single(editor_t *ed, long dx, long dy, bool select)
                 dx = -(long)step;
             } else if (dx > 0) {
                 size_t step = tab - (ed->cx_col % tab);
-                size_t runes = edit_line_runes(line, len);
-                bool all_spaces = (ed->cx_col + step <= runes);
+                bool all_spaces = (byte_pos + step <= len);
                 for (size_t k = 0; all_spaces && k < step; k++) {
-                    if (line[ed->cx_col + k] != ' ') all_spaces = false;
+                    if (line[byte_pos + k] != ' ') all_spaces = false;
                 }
                 if (all_spaces) dx = (long)step;
             }

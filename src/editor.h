@@ -5,8 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define EDIT_TABSTOP 8
-
 #ifndef TAM_EDIT_SELECTION_DEFINED
 #define TAM_EDIT_SELECTION_DEFINED
 typedef struct {
@@ -253,8 +251,8 @@ bool editor_redo(editor_t *ed);
 /* Line & Rune helpers */
 size_t edit_line_runes(const char *line, size_t len);
 size_t edit_rune_to_byte(const char *line, size_t len, size_t col);
-int    edit_visual_col(const char *line, size_t len, size_t col);
-size_t edit_visual_to_rune(const char *line, size_t len, int cells);
+int    edit_visual_col(const char *line, size_t len, size_t col, int tabsize);
+size_t edit_visual_to_rune(const char *line, size_t len, int cells, int tabsize);
 
 /* Softwrap helpers */
 size_t edit_softwrap_line_sublines(const char *line, size_t len, int width,

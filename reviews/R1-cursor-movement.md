@@ -24,7 +24,7 @@ Architecture summary relevant to cursor movement:
 - **Effect:** after Home/End/word jump on a soft-wrapped line, the next Up/Down uses a rune index as if it were a pixel/cell X, so the cursor lands at the wrong column/subline (especially with tabs, wide chars, or wrapping). Horizontal arrow moves are fine because they call `update_goal_col(ed)` (`cursor.c:222,236,240`).
 - **Fix:** have home/end/word motions (and any move that changes column) update goal via `update_goal_col(ed)` in softwrap-aware form, or store both rune-goal and visual-goal consistently.
 
-### 2. `edit_visual_col` / `edit_visual_to_rune` ignore configured tab width (medium, correctness drift)
+### 2. `edit_visual_col` / `edit_visual_to_rune` ignore configured tab width (medium, correctness drift) — **FIXED**
 - `edit_visual_col` advances tabs as `EDIT_TABSTOP - (cells % EDIT_TABSTOP)` with `EDIT_TABSTOP` fixed to 8 (`editor.h:8`, `editor.c:295-314`); `edit_visual_to_rune` same (`editor.c:316-336`).
 - Rendering and softwrap math use `config.tabsize`/`tabsize` (`render.c:211,331,409`; `cursor.c:96`, `editor.c:343+` softwrap helpers take `tabsize`).
 - **Effect:** any feature relying on these helpers (e.g. non-wrapped horizontal scrolling/visual positioning paths that use `edit_visual_col`, prompt/cursor visuals where used, or future code) disagrees with displayed layout when `tabsize != 8`, causing cursor/scroll misalignment.
@@ -35,13 +35,13 @@ Architecture summary relevant to cursor movement:
 - **Effect:** with extra cursors it relocates every cursor but deletes only once at the primary's old position; with selections spanning lines it does nothing useful; it also doesn't go through `check_writable`/multi-edit grouping semantics the way normal edits do. Behavior is inconsistent with `Backspace`/`Delete` multi-cursor handling (`editor.c:1548-1567`).
 - **Fix:** implement as an edit operation (select-word-left range per cursor + delete) dispatched through the same single/multi-cursor path as other destructive edits, or at least apply per-cursor and preserve invariants.
 
-### 4. Tab-indentation horizontal stepping mixes rune counts with byte indexing (medium, latent UTF-8 bug)
+### 4. Tab-indentation horizontal stepping mixes rune counts with byte indexing (medium, latent UTF-8 bug) — **FIXED**
 - In `cursor_move_single`, when `tabmovement`+`tabstospaces` applies for right-move it computes: `bool all_spaces = (ed->cx_col + step <= runes); for (...) if (line[ed->cx_col + k] != ' ') ...` (`cursor.c:142-149`).
 - `ed->cx_col`/`runes` are rune columns but `line[...]` is indexed by that value as a **byte** offset. The function earlier checks "in indent" by scanning bytes up to `cx_col` (`cursor.c:131-136`).
 - **Effect:** correct for ASCII-space indentation, but logically wrong for non-ASCII text (and fragile if assumptions change). A non-ASCII char in the prefix would desynchronize rune/byte positions; comparing rune count to a byte-based bound is inconsistent.
 - **Fix:** operate in one coordinate space: check indent/padding by iterating UTF-8 runes or by using byte offsets consistently with `edit_rune_to_byte`.
 
-### 5. `cursor_clamp` ignores the empty-document case (low-medium edge case)
+### 5. `cursor_clamp` ignores the empty-document case (low-medium edge case) — **FIXED**
 - `cursor_clamp` returns immediately if `ed->doc.count == 0` (`cursor.c:54-61`), leaving `cx_line/cx_col` (and extras/selection anchors elsewhere) potentially out of range.
 - Depending on invariants (`buffer_new`/load paths), the doc may normally have >=1 line, but if a zero-line state occurs, clamping won't normalize cursors.
 - **Fix:** clamp to `(0,0)` when `count == 0` (and/or enforce the single-empty-line invariant centrally).

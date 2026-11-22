@@ -292,8 +292,9 @@ size_t edit_rune_to_byte(const char *line, size_t len, size_t col)
     return i;
 }
 
-int edit_visual_col(const char *line, size_t len, size_t col)
+int edit_visual_col(const char *line, size_t len, size_t col, int tabsize)
 {
+    if (tabsize <= 0) tabsize = 4;
     int cells = 0;
     size_t i = 0;
     while (i < len && col > 0) {
@@ -302,7 +303,7 @@ int edit_visual_col(const char *line, size_t len, size_t col)
         if (used == 0) break;
 
         if (cp == '\t') {
-            cells += EDIT_TABSTOP - (cells % EDIT_TABSTOP);
+            cells += tabsize - (cells % tabsize);
         } else {
             cells += tam_uni_width(cp);
         }
@@ -313,8 +314,9 @@ int edit_visual_col(const char *line, size_t len, size_t col)
     return cells;
 }
 
-size_t edit_visual_to_rune(const char *line, size_t len, int cells)
+size_t edit_visual_to_rune(const char *line, size_t len, int cells, int tabsize)
 {
+    if (tabsize <= 0) tabsize = 4;
     int visual = 0;
     size_t i = 0;
     size_t col = 0;
@@ -324,7 +326,7 @@ size_t edit_visual_to_rune(const char *line, size_t len, int cells)
         if (used == 0) break;
 
         int width = cp == '\t'
-                        ? EDIT_TABSTOP - (visual % EDIT_TABSTOP)
+                        ? tabsize - (visual % tabsize)
                         : tam_uni_width(cp);
 
         if (visual + width > cells) break;

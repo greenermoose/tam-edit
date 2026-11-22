@@ -240,7 +240,7 @@ static void render_paint_view(editor_t *ed, view_t *v, grid_t *g,
         if (v->cx_line < b->doc.count) {
             cx_cells = edit_visual_col(b->doc.lines[v->cx_line],
                                        b->doc.lens[v->cx_line],
-                                       v->cx_col);
+                                       v->cx_col, tabsize);
         }
         if (cx_cells < (int)v->left_col) v->left_col = (size_t)cx_cells;
         if (cx_cells >= (int)v->left_col + text_cols) {
@@ -810,10 +810,12 @@ void render_draw(renderer_t *ren, editor_t *ed, tam_tty_t *tty)
 
     /* 6. Hardware cursor placement */
     int crow, ccol;
+    int tabsize = ed->config.tabsize > 0 ? ed->config.tabsize : 4;
     if (ed->prompt.active) {
         crow = bottom_prompt_row + 1;
         int lbl_w = (int)strlen(ed->prompt.label);
-        int prompt_cx_cells = edit_visual_col(ed->prompt.buf, ed->prompt.len, ed->prompt.cx);
+        int prompt_cx_cells = edit_visual_col(ed->prompt.buf, ed->prompt.len,
+                                              ed->prompt.cx, tabsize);
         ccol = lbl_w + prompt_cx_cells + 1;
     } else if (ed->active_view != NULL) {
         view_t *av = ed->active_view;
@@ -831,7 +833,7 @@ void render_draw(renderer_t *ren, editor_t *ed, tam_tty_t *tty)
             if (av->buf != NULL && av->cx_line < av->buf->doc.count) {
                 cursor_cells = edit_visual_col(av->buf->doc.lines[av->cx_line],
                                                av->buf->doc.lens[av->cx_line],
-                                               av->cx_col);
+                                               av->cx_col, tabsize);
             }
             ccol = av->x + gw + cursor_cells - (int)av->left_col + 1;
         } else {

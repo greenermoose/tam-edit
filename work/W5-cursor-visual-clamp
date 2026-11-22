@@ -1,0 +1,42 @@
+W5 CURSOR VISUAL TABSIZE, TABMOVEMENT UTF-8, AND EMPTY CLAMP
+
+Date: 2026-11-21
+AI harness: Antigravity CLI 1.5.14
+AI model: Gemini 4 Hydrogen (Medium)
+Commits: (pending)
+
+
+GUIDANCE
+
+  Fred: "/plan Do the next slice of work for tam-edit."
+  Fred approved the plan covering Findings #2, #4, and #5 of
+  reviews/R1-cursor-movement.md.
+
+
+DONE
+
+  - Parameterized edit_visual_col and edit_visual_to_rune by int tabsize
+    (<= 0 falls back to 4) in src/editor.h and src/editor.c; removed
+    EDIT_TABSTOP and updated call sites in src/render.c and src/main.c.
+  - Fixed tab-indent stepping in cursor_move_single (src/cursor.c) to
+    convert ed->cx_col via edit_rune_to_byte and index/bound-check by
+    byte offset instead of rune column.
+  - Updated cursor_clamp (src/cursor.c) to normalize primary and extra
+    cursors to (0, 0) and clear sel.active when doc.count == 0.
+  - Added regression tests in tests/test_editor.c (test_visual_columns,
+    test_tabmovement_utf8, test_cursor_clamp_empty_doc) and marked #2,
+    #4, #5 fixed in reviews/R1-cursor-movement.md.
+  - Bumped VERSION to 1.0.5; make test, make test-asan, make test-pty
+    (with TAM_EDIT_CONFIG_HOME unset), and make check-deps all passed.
+
+
+FAILED
+
+  - Nothing.
+
+
+HANDOFF
+
+  - Remaining open findings in reviews/R1-cursor-movement.md: #7
+    (multi-cursor downstream metadata), #6 (extract scroll clamping
+    from render.c), and #8 (Unicode word classes). See WHATNOW.

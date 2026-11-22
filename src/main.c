@@ -226,13 +226,13 @@ static bool handle_mouse_sgr(editor_t *ed, const unsigned char *buf, size_t len,
 
     size_t rune_col = 0;
     if (doc_l < hit->buf->doc.count) {
+        int tabsize = ed->config.tabsize > 0 ? ed->config.tabsize : 4;
         if (!hit->softwrap) {
             int target_visual = rel_x + (int)hit->left_col;
             rune_col = edit_visual_to_rune(hit->buf->doc.lines[doc_l],
                                            hit->buf->doc.lens[doc_l],
-                                           target_visual);
+                                           target_visual, tabsize);
         } else {
-            int tabsize = ed->config.tabsize > 0 ? ed->config.tabsize : 4;
             int text_cols = hit->w > gw ? hit->w - gw : 80;
             rune_col = edit_softwrap_vloc_to_rune(hit->buf->doc.lines[doc_l],
                                                   hit->buf->doc.lens[doc_l],
