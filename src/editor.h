@@ -66,6 +66,8 @@ typedef struct {
 typedef enum {
     PROMPT_NONE = 0,
     PROMPT_COMMAND,
+    PROMPT_PALETTE,
+    PROMPT_CONFIRM_CLOSE,
     PROMPT_FIND,
     PROMPT_FIND_LITERAL,
     PROMPT_GOTO,
@@ -86,6 +88,12 @@ typedef struct {
     char  saved_cur[512];
 } prompt_history_t;
 
+#define PROMPT_UNDO_MAX 16
+typedef struct {
+    char text[512];
+    size_t cx;
+} prompt_snapshot_t;
+
 typedef struct {
     prompt_kind_t kind;
     char          buf[512];
@@ -93,6 +101,17 @@ typedef struct {
     size_t        cx;        /* rune column cursor inside prompt */
     char          label[64]; /* prompt label, e.g. "Find: " or "> " */
     bool          active;
+    bool          manual_reload;
+    uint64_t      view_id;
+    size_t        palette_index;
+    bool          palette_selected;
+    bool          selecting;
+    bool          mark;
+    size_t        anchor;
+    prompt_snapshot_t undo[PROMPT_UNDO_MAX];
+    size_t undo_count;
+    prompt_snapshot_t redo[PROMPT_UNDO_MAX];
+    size_t redo_count;
     char          payload[512];
     char        **comp_items;
     size_t        comp_count;
@@ -163,6 +182,8 @@ typedef struct {
     bool           crlf;
     bool           dirty;
     bool           quit_armed;
+    bool           mark;
+    bool           force_redraw;
     bool           running;
     int            tty_out_fd;
     char           message[256];
@@ -212,6 +233,7 @@ bool editor_next_split(editor_t *ed);
 bool editor_prev_split(editor_t *ed);
 bool editor_add_tab(editor_t *ed, const char *path);
 bool editor_close_tab(editor_t *ed);
+bool editor_close_current(editor_t *ed, bool discard);
 bool editor_next_tab(editor_t *ed);
 bool editor_prev_tab(editor_t *ed);
 
@@ -239,6 +261,8 @@ void editor_insert_newline(editor_t *ed);
 void editor_insert_tab(editor_t *ed);
 void editor_backspace(editor_t *ed);
 void editor_delete_word_left(editor_t *ed);
+void editor_delete_selections(editor_t *ed);
+void editor_delete_word_right(editor_t *ed);
 void editor_delete(editor_t *ed);
 
 /* Cursor & motion compatibility helpers */

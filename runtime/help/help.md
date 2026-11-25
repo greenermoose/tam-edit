@@ -4,17 +4,17 @@ tam-edit is an easy to use, intuitive, text editor that takes advantage of the
 full capabilities of modern terminals.
 
 tam-edit can be controlled by commands entered on the command bar, or with
-keybindings. To open the command bar, press `Ctrl-e`: the `>` prompt will
+keybindings. To open the command prompt, press `Alt+E`. The `>` prompt will
 display. From now on, when the documentation shows a command to run (such as
-`> help`), press `Ctrl-e` and type the command followed by enter.
+`> help`), press `Ctrl+E` and type the command followed by enter.
 
 For a list of the default keybindings, run `> help defaultkeys`.
 For more information on keybindings, see `> help keybindings`.
-To toggle a short list of important keybindings, press Alt-g.
+Press Ctrl+G to see the active keybindings.
 
 ## Quick-start
 
-To quit, press `Ctrl-q`. Save by pressing `Ctrl-s`. Press `Ctrl-e`, as previously
+To quit, press `Ctrl+Q`. Save by pressing `Ctrl+S`. Press `Ctrl+E`, as previously
 mentioned, to start typing commands. To see which commands are available, at the
 prompt, press tab, or view the help topic with `> help commands`.
 
@@ -26,14 +26,14 @@ If the colorscheme doesn't look good, you can change it with
 or see more information about colorschemes and syntax highlighting with `> help
 colors`.
 
-Press `Ctrl-w` to move between splits, and type `> vsplit filename` or
-`> hsplit filename` to open a new split.
+Run `next-split` from the palette to move between splits. Use
+`> vsplit filename` or `> hsplit filename` to open a split.
 
 ## Accessing more help
 
 tam-edit has a built-in help system which can be accessed with the `> help` command.
 
-To view help for the various available topics, press `Ctrl-e` to access command
+To view help for the various available topics, press `Ctrl+E` to access command
 mode and type in `> help` followed by a topic. Typing just `> help` will open
 this page.
 

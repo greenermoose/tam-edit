@@ -410,13 +410,13 @@ bool keybind_parse_string(const char *str, tam_key_type_t *type_out,
 
     /* Parse modifier prefixes: "Ctrl-", "Alt-", "Shift-" or combined "CtrlShift" */
     while (*p) {
-        if (strncasecmp(p, "ctrl-", 5) == 0) {
+        if (strncasecmp(p, "ctrl", 4) == 0 && (p[4] == '-' || p[4] == '+')) {
             mods |= TAM_MOD_CTRL;
             p += 5;
-        } else if (strncasecmp(p, "alt-", 4) == 0) {
+        } else if (strncasecmp(p, "alt", 3) == 0 && (p[3] == '-' || p[3] == '+')) {
             mods |= TAM_MOD_ALT;
             p += 4;
-        } else if (strncasecmp(p, "shift-", 6) == 0) {
+        } else if (strncasecmp(p, "shift", 5) == 0 && (p[5] == '-' || p[5] == '+')) {
             mods |= TAM_MOD_SHIFT;
             p += 6;
         } else if (strncasecmp(p, "ctrl", 4) == 0 && isupper((unsigned char)p[4])) {
@@ -470,9 +470,10 @@ bool keybind_parse_string(const char *str, tam_key_type_t *type_out,
     } else if (strcasecmp(p, "space") == 0) {
         type = TAM_KEY_CHAR;
         cp = ' ';
-    } else if (p[0] == 'f' || p[0] == 'F') {
-        int fnum = atoi(p + 1);
-        if (fnum >= 1 && fnum <= 12) {
+    } else if ((p[0] == 'f' || p[0] == 'F') && isdigit((unsigned char)p[1])) {
+        char *end;
+        long fnum = strtol(p + 1, &end, 10);
+        if (!*end && fnum >= 1 && fnum <= 12) {
             type = (tam_key_type_t)(TAM_KEY_F1 + (fnum - 1));
         } else {
             return false;
@@ -480,6 +481,14 @@ bool keybind_parse_string(const char *str, tam_key_type_t *type_out,
     } else if (strlen(p) == 1) {
         type = TAM_KEY_CHAR;
         cp = (unsigned char)tolower((unsigned char)p[0]);
+        if (mods & TAM_MOD_SHIFT && !(mods & TAM_MOD_CTRL)) {
+            const char *plain = "`1234567890-=[]\\;',./";
+            const char *shifted = "~!@#$%^&*()_+{}|:\"<>?";
+            const char *key = strchr(plain, (int)cp);
+            cp = key ? (unsigned char)shifted[key - plain] : (unsigned char)toupper((int)cp);
+            mods &= ~TAM_MOD_SHIFT;
+        }
+        if ((mods & TAM_MOD_CTRL) && cp == '\\') cp = '|';
     } else {
         /* Other key names like MouseLeft, etc. can be accepted */
         return false;
@@ -495,10 +504,17 @@ void keybind_format_string(tam_key_type_t type, uint32_t cp, unsigned mods,
                            char *buf, size_t buflen)
 {
     if (!buf || buflen == 0) return;
+    if (type == TAM_KEY_CHAR && (mods & TAM_MOD_ALT) && cp >= 'A' && cp <= 'Z')
+        mods |= TAM_MOD_SHIFT;
+    if (type == TAM_KEY_CHAR && mods == 0 && cp >= 'A' && cp <= 'Z')
+        mods |= TAM_MOD_SHIFT;
+    if (type == TAM_KEY_CHAR && (mods & TAM_MOD_CTRL) && cp == '|') cp = '\\';
+    if (type == TAM_KEY_CHAR && mods && cp >= 'a' && cp <= 'z')
+        cp = (uint32_t)toupper((int)cp);
     char prefix[64] = "";
-    if (mods & TAM_MOD_CTRL)  strncat(prefix, "Ctrl-",  sizeof(prefix) - strlen(prefix) - 1);
-    if (mods & TAM_MOD_ALT)   strncat(prefix, "Alt-",   sizeof(prefix) - strlen(prefix) - 1);
-    if (mods & TAM_MOD_SHIFT) strncat(prefix, "Shift-", sizeof(prefix) - strlen(prefix) - 1);
+    if (mods & TAM_MOD_CTRL)  strncat(prefix, "Ctrl+",  sizeof(prefix) - strlen(prefix) - 1);
+    if (mods & TAM_MOD_ALT)   strncat(prefix, "Alt+",   sizeof(prefix) - strlen(prefix) - 1);
+    if (mods & TAM_MOD_SHIFT) strncat(prefix, "Shift+", sizeof(prefix) - strlen(prefix) - 1);
 
     const char *kname = NULL;
     char ch_name[16] = "";
@@ -516,7 +532,7 @@ void keybind_format_string(tam_key_type_t type, uint32_t cp, unsigned mods,
     case TAM_KEY_BACKSPACE: kname = "Backspace"; break;
     case TAM_KEY_INSERT:    kname = "Insert"; break;
     case TAM_KEY_DELETE:    kname = "Delete"; break;
-    case TAM_KEY_ESC:       kname = "Esc"; break;
+    case TAM_KEY_ESC:       kname = "Escape"; break;
     case TAM_KEY_CHAR:
         if (cp == ' ') {
             kname = "Space";
@@ -928,6 +944,14 @@ bool config_import_micro(const char *micro_dir, const char *out_ini_path, FILE *
     return ok;
 }
 
+static bool binding_keys_equal(const char *left, const char *right)
+{
+    tam_key_event_t a, b;
+    return keybind_parse_string(left, &a.type, &a.codepoint, &a.mods) &&
+           keybind_parse_string(right, &b.type, &b.codepoint, &b.mods) &&
+           a.type == b.type && a.codepoint == b.codepoint && a.mods == b.mods;
+}
+
 static bool ini_update_entry(const char *section, const char *key, const char *value)
 {
     char *cfg_dir = get_config_dir(true);
@@ -983,7 +1007,7 @@ static bool ini_update_entry(const char *section, const char *key, const char *v
                     *eq = '\0';
                     char *k = trim_inplace(t);
                     bool match = (strcasecmp(section, "bindings") == 0)
-                                 ? (strcasecmp(k, key) == 0)
+                                 ? binding_keys_equal(k, key)
                                  : (strcmp(k, key) == 0);
                     if (match) {
                         if (value != NULL) {

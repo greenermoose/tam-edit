@@ -34,6 +34,7 @@ static char *base64_encode(const unsigned char *data, size_t input_len)
 
     size_t i, j;
     for (i = 0, j = 0; i < input_len;) {
+        size_t remaining = input_len - i;
         uint32_t octet_a = i < input_len ? data[i++] : 0;
         uint32_t octet_b = i < input_len ? data[i++] : 0;
         uint32_t octet_c = i < input_len ? data[i++] : 0;
@@ -42,11 +43,17 @@ static char *base64_encode(const unsigned char *data, size_t input_len)
 
         encoded[j++] = table[(triple >> 18) & 0x3F];
         encoded[j++] = table[(triple >> 12) & 0x3F];
-        encoded[j++] = (i > input_len + 1) ? '=' : table[(triple >> 6) & 0x3F];
-        encoded[j++] = (i > input_len)     ? '=' : table[triple & 0x3F];
+        encoded[j++] = remaining < 2 ? '=' : table[(triple >> 6) & 0x3F];
+        encoded[j++] = remaining < 3 ? '=' : table[triple & 0x3F];
     }
     encoded[output_len] = '\0';
     return encoded;
+}
+
+static bool console_clipboard(void)
+{
+    const char *term = getenv("TERM");
+    return term && strcmp(term, "linux") == 0;
 }
 
 bool clipboard_set(const char *text, size_t len, int tty_fd)
@@ -55,13 +62,13 @@ bool clipboard_set(const char *text, size_t len, int tty_fd)
 
     /* 1. Internal buffer */
     char *copy = malloc(len + 1);
-    if (copy != NULL) {
-        memcpy(copy, text, len);
-        copy[len] = '\0';
-        free(g_internal_clip);
-        g_internal_clip = copy;
-        g_internal_len = len;
-    }
+    if (copy == NULL) return false;
+    memcpy(copy, text, len);
+    copy[len] = '\0';
+    free(g_internal_clip);
+    g_internal_clip = copy;
+    g_internal_len = len;
+    if (console_clipboard()) return true;
 
     /* 2. OSC 52 sequence to the terminal */
     if (tty_fd >= 0) {
@@ -82,7 +89,7 @@ bool clipboard_set(const char *text, size_t len, int tty_fd)
     }
 
     /* 3. External clipboard helpers if available */
-    if (getenv("WAYLAND_DISPLAY") != NULL) {
+    if (!console_clipboard() && getenv("WAYLAND_DISPLAY") != NULL) {
         const char *const argv[] = {"wl-copy", NULL};
         tam_exec_opts_t opts = {
             .timeout_ms = 300,
@@ -92,7 +99,7 @@ bool clipboard_set(const char *text, size_t len, int tty_fd)
         };
         tam_exec_result_t res = tam_exec_opts(argv, &opts);
         tam_exec_result_free(&res);
-    } else if (getenv("DISPLAY") != NULL) {
+    } else if (!console_clipboard() && getenv("DISPLAY") != NULL) {
         const char *const argv[] = {"xclip", "-selection", "clipboard", NULL};
         tam_exec_opts_t opts = {
             .timeout_ms = 300,
@@ -110,12 +117,13 @@ bool clipboard_set(const char *text, size_t len, int tty_fd)
 char *clipboard_get(size_t *out_len)
 {
     /* 1. Try Wayland wl-paste */
-    if (getenv("WAYLAND_DISPLAY") != NULL) {
+    if (!console_clipboard() && getenv("WAYLAND_DISPLAY") != NULL) {
         const char *const argv[] = {"wl-paste", "--no-newline", NULL};
         tam_exec_result_t res = tam_exec(argv, 300);
         if (res.exit_code == 0 && res.stdout_buf != NULL && res.stdout_len > 0) {
-            char *ret = strdup(res.stdout_buf);
-            if (out_len != NULL) *out_len = res.stdout_len;
+            char *ret = malloc(res.stdout_len + 1);
+            if (ret) memcpy(ret, res.stdout_buf, res.stdout_len + 1);
+            if (out_len != NULL) *out_len = ret ? res.stdout_len : 0;
             tam_exec_result_free(&res);
             return ret;
         }
@@ -123,12 +131,13 @@ char *clipboard_get(size_t *out_len)
     }
 
     /* 2. Try X11 xclip */
-    if (getenv("DISPLAY") != NULL) {
+    if (!console_clipboard() && getenv("DISPLAY") != NULL) {
         const char *const argv[] = {"xclip", "-out", "-selection", "clipboard", NULL};
         tam_exec_result_t res = tam_exec(argv, 300);
         if (res.exit_code == 0 && res.stdout_buf != NULL && res.stdout_len > 0) {
-            char *ret = strdup(res.stdout_buf);
-            if (out_len != NULL) *out_len = res.stdout_len;
+            char *ret = malloc(res.stdout_len + 1);
+            if (ret) memcpy(ret, res.stdout_buf, res.stdout_len + 1);
+            if (out_len != NULL) *out_len = ret ? res.stdout_len : 0;
             tam_exec_result_free(&res);
             return ret;
         }
@@ -137,7 +146,8 @@ char *clipboard_get(size_t *out_len)
 
     /* 3. Fallback to internal buffer */
     if (g_internal_clip != NULL) {
-        char *ret = strdup(g_internal_clip);
+        char *ret = malloc(g_internal_len + 1);
+        if (ret) memcpy(ret, g_internal_clip, g_internal_len + 1);
         if (out_len != NULL) *out_len = g_internal_len;
         return ret;
     }

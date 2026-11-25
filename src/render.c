@@ -3,6 +3,7 @@
 #include "cursor.h"
 #include "colorscheme.h"
 #include "pane.h"
+#include "prompt.h"
 #include "search.h"
 #include "syntax.h"
 
@@ -504,12 +505,19 @@ static void render_paint_prompt_or_message(editor_t *ed, grid_t *g, int row)
         }
         size_t i = 0;
         size_t p_len = ed->prompt.len;
+        size_t rune = 0;
+        size_t anchor = ed->prompt.anchor;
+        size_t cx = ed->prompt.cx;
         while (i < p_len && col < g->cols) {
             uint32_t cp = 0;
             size_t used = tam_utf8_decode(ed->prompt.buf + i, p_len - i, &cp);
             if (used == 0) break;
-            set_cell(g, row, col++, cp, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE, 1);
+            bool selected = ed->prompt.selecting &&
+                ((rune >= anchor && rune < cx) || (rune >= cx && rune < anchor));
+            set_cell(g, row, col++, cp, COLOR_DEFAULT, COLOR_DEFAULT,
+                     selected ? ATTR_REVERSE : ATTR_NONE, 1);
             i += used;
+            rune++;
         }
     } else if (ed->message[0] != '\0') {
         const char *m = ed->message;
@@ -532,17 +540,11 @@ static void render_paint_keybindings_footer(editor_t *ed, grid_t *g, int row)
     } footer_hint_t;
 
     static const footer_hint_t hints[] = {
-        {"^S", "Save"},
-        {"^Q", "Quit"},
-        {"^Z", "Undo"},
-        {"^F", "Find"},
-        {"^C", "Copy"},
-        {"^E", "Cmd"},
-        {"^H", "Help"},
-        {"M-G", "Keys"},
-        {"^V", "Paste"},
-        {"^Y", "Redo"},
-        {"^X", "Cut"},
+        {"Ctrl+G", "Guidance"},
+        {"Ctrl+E", "Execute"},
+        {"Ctrl+S", "Save"},
+        {"Ctrl+F", "Find"},
+        {"Ctrl+Q", "Quit"},
         {NULL, NULL}
     };
 
@@ -558,6 +560,16 @@ static void render_paint_keybindings_footer(editor_t *ed, grid_t *g, int row)
         set_cell(g, row, c, ' ', fg, bg, base_attr, 1);
     }
 
+    if (ed->prompt.active) {
+        const char *match = ed->prompt.kind == PROMPT_PALETTE
+                            ? prompt_palette_match(&ed->prompt) : NULL;
+        const char *message = ed->message;
+        if (!*message && ed->prompt.kind == PROMPT_PALETTE)
+            message = match ? match : "Enter runs a typed command";
+        for (int col = 1; *message && col < g->cols; col++)
+            set_cell(g, row, col, (unsigned char)*message++, fg, bg, base_attr, 1);
+        return;
+    }
     int col = 1;
     for (size_t i = 0; hints[i].key != NULL && col < g->cols; i++) {
         if (i > 0) {
@@ -606,6 +618,12 @@ void render_draw(renderer_t *ren, editor_t *ed, tam_tty_t *tty)
     style_t num_style     = colorscheme_get(&ed->colorscheme, "line-number");
     style_t cur_num_style = colorscheme_get(&ed->colorscheme, "current-line-number");
     style_t curline_style = colorscheme_get(&ed->colorscheme, "cursor-line");
+
+    if (ed->force_redraw) {
+        tam_tty_write(tty, "\x1b[2J", 4);
+        ren->force_redraw = true;
+        ed->force_redraw = false;
+    }
 
     /* 1. Clear back grid */
     for (int i = 0; i < rows * cols; i++) {

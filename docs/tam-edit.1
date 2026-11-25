@@ -33,32 +33,34 @@ Import \fIsettings.json\fR and \fIbindings.json\fR from \fIDIR\fR (default
 Print per-line syntax highlight spans for \fIFILE\fR and exit.
 .SH KEYBINDINGS
 .TP
-.B Ctrl-S / F2
-Save current buffer.
+.B Ctrl+E / Ctrl+G
+Open the command palette / show keybinding guidance.
 .TP
-.B Ctrl-Q / F4 / F10
-Quit (press twice or confirm on modified buffers).
+.B Ctrl+N / Ctrl+O / Ctrl+S
+New untitled tab / open a file / save.
 .TP
-.B Ctrl-Z / Ctrl-Y
-Undo / Redo.
+.B Ctrl+D / Ctrl+Q
+Close the current split or tab / quit the editor.
 .TP
-.B Ctrl-C / Ctrl-X / Ctrl-V
-Copy / Cut / Paste.
+.B Ctrl+F / Ctrl+R / Ctrl+U
+Find / replace / reload the active file.
 .TP
-.B Ctrl-F / Alt-F / Ctrl-N / Ctrl-P
-Find (regex) / Find (literal) / Find next / Find previous.
+.B Alt+J / Alt+Shift+J
+Find next / previous match.
 .TP
-.B Ctrl-E / Ctrl-L / Ctrl-B
-Command prompt / Go to line / Shell prompt.
+.B Alt+T / Alt+Shift+T
+Next / previous tab.
 .TP
-.B Alt-N / Alt-M / Alt-X / Alt-P / Alt-C
-Multi-cursor spawn, select-all-matches, skip, remove last, remove all.
+.B Ctrl+C / Ctrl+X / Ctrl+V / Ctrl+K
+Copy / cut / paste / delete the current line.
 .TP
-.B Ctrl-T / Alt-. / Alt-, / Ctrl-W
-New tab / Next tab / Previous tab / Next split.
+.B Ctrl+Z / Ctrl+Y
+Undo / redo.
 .TP
-.B F1 / Ctrl-H
-Open or close embedded help (Esc also closes help).
+.B Alt+M
+Toggle the selection anchor. Move the cursor to extend the selection.
+Use Alt+, and Alt+. for word movement, Alt+< and Alt+> for buffer
+boundaries, and Alt+Backspace and Alt+D for word deletion.
 .SH ENVIRONMENT
 .TP
 .B TAM_EDIT_CONFIG_HOME

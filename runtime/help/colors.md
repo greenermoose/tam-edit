@@ -8,7 +8,7 @@ This help page aims to cover two aspects of tam-edit's syntax highlighting engin
 
 ## Colorschemes
 
-To change your colorscheme, press `Ctrl-e` in tam-edit to bring up the command
+To change your colorscheme, press `Ctrl+E` in tam-edit to bring up the command
 prompt, and type:
 
 ```

@@ -224,8 +224,7 @@ Here are the available options:
     default value: `false`
 
 * `keymenu`: display the nano-style key menu at the bottom of the screen. Note
-   that ToggleKeyMenu is bound to `Alt-g` by default and this is displayed in
-   the statusline. To disable the key binding, bind `Alt-g` to `None`.
+   that guidance is available with Ctrl+G.
 
     default value: `false`
 
@@ -302,7 +301,7 @@ Here are the available options:
 
 * `paste`: treat characters sent from the terminal in a single chunk as a paste
    event rather than a series of manual key presses. If you are pasting using
-   the terminal keybinding (not `Ctrl-v`, which is tam-edit's default paste
+   the terminal keybinding (not `Ctrl+V`, which is tam-edit's default paste
    keybinding) then it is a good idea to enable this option during the paste
    and disable once the paste is over. See `> help copypaste` for details about
    copying and pasting in a terminal environment.
@@ -508,7 +507,7 @@ Here are the available options:
 
 * `useprimary` (only useful on unix): defines whether or not tam-edit will use the
    primary clipboard to copy selections in the background. This does not affect
-   the normal clipboard using `Ctrl-c` and `Ctrl-v`.
+   the normal clipboard using `Ctrl+C` and `Ctrl+V`.
 
     default value: `true`
 

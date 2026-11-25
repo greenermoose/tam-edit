@@ -16,8 +16,8 @@ the settings and their values. To change an option, you can either change the
 value in the `settings.json` file, or you can type it in directly while using
 tam-edit.
 
-Press Ctrl-e to go to command mode, and type `set option value` (in the
-future, I will use `> set option value` to indicate pressing Ctrl-e). The change
+Press Ctrl+E to go to command mode, and type `set option value` (in the
+future, I will use `> set option value` to indicate pressing Ctrl+E). The change
 will take effect immediately and will also be saved to the `settings.json` file
 so that the setting will stick even after you close tam-edit.
 
@@ -45,26 +45,10 @@ If you would like to know more about all the available options, see the
 
 ### Keybindings
 
-Keybindings work in much the same way as options. You configure them using the
-`~/.config/tam-edit/bindings.json` file.
-
-For example if you would like to bind `Ctrl-r` to redo you could put the
-following in `bindings.json`:
-
-```jsonc
-{
-    "Ctrl-r": "Redo"
-}
-```
-
-Very simple.
-
-You can also bind keys while in tam-edit by using the `> bind key action` command,
-but the bindings you make with the command won't be saved to the
-`bindings.json` file.
-
-For more information about keybindings, like which keys can be bound, and what
-actions are available, see the `keybindings` help topic (`> help keybindings`).
+Press Ctrl+G to see the active keybindings. To bind Alt+L to the
+go-to-line prompt, open the command prompt with Alt+E and enter
+`bind Alt+L goto-line`. The binding is saved in the bindings
+section of settings.ini.
 
 ### Configuration with Lua
 

@@ -16,8 +16,17 @@ static const char *const k_commands[] = {
     "ls", "open", "pwd", "quit", "rename", "reopen", "replace", "replaceall",
     "reset", "retab", "run", "save", "save-as", "set", "setlocal", "show",
     "showkey", "tab", "tabmove", "tabswitch", "textfilter", "toggle",
-    "togglelocal", "unbind", "vsplit", "write"
+    "togglelocal", "unbind", "unsplit", "tabnext", "tabprev", "tabclose", "vsplit", "write"
 };
+
+bool prompt_is_command(const char *text)
+{
+    if (strcmp(text, "q") == 0 || strcmp(text, "q!") == 0 ||
+        strcmp(text, "w") == 0 || strcmp(text, "e") == 0) return true;
+    for (size_t i = 0; i < sizeof(k_commands) / sizeof(k_commands[0]); i++)
+        if (strcmp(text, k_commands[i]) == 0) return true;
+    return false;
+}
 
 static const char *const k_encodings[] = {
     "euc-jp", "iso-8859-1", "iso-8859-15", "shift_jis",
@@ -212,7 +221,7 @@ static void build_completions(editor_t *ed)
         return;
     }
 
-    if (p->kind != PROMPT_COMMAND) return;
+    if (p->kind != PROMPT_COMMAND && p->kind != PROMPT_PALETTE) return;
 
     /* Count words before cursor/end */
     const char *s = p->buf;

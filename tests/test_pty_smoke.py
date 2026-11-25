@@ -62,6 +62,7 @@ def test_cli_micro_import():
             f.write("{\n    \"Alt-w\": \"togglelocal softwrap\",\n    \"Ctrl-t\": \"AddTab\",\n}\n")
 
         env = dict(os.environ, HOME=tmp_home, XDG_CONFIG_HOME=os.path.join(tmp_home, ".config"))
+        env.pop("TAM_EDIT_CONFIG_HOME", None)
         proc = subprocess.run(["./build/tam-edit", "--import-micro-config", micro_dir],
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         assert proc.returncode == 0, f"--import-micro-config failed:\n{proc.stdout}\n{proc.stderr}"
@@ -455,6 +456,62 @@ def test_pty_delete_word_left():
         shutil.rmtree(cfg_dir, ignore_errors=True)
     print("[PASS] PTY DeleteWordLeft (Alt-Backspace) verified")
 
+def test_pty_standard_keys():
+    for term in ("linux", "xterm-256color"):
+        with tempfile.TemporaryDirectory(prefix="tam-edit-keys-") as root:
+            path = os.path.join(root, "doc.txt")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("alpha beta\nkeep\n")
+
+            env = dict(os.environ, TERM=term, TAM_EDIT_CONFIG_HOME=root)
+            env.pop("WAYLAND_DISPLAY", None)
+            env.pop("DISPLAY", None)
+            master, slave = pty.openpty()
+            proc = subprocess.Popen(
+                ["./build/tam-edit", path], stdin=slave, stdout=slave,
+                stderr=slave, env=env, close_fds=True,
+            )
+            os.close(slave)
+
+            def send(data):
+                os.write(master, data)
+                return _read_pty_until_idle(master)
+
+            try:
+                _read_pty_until_idle(master)
+                if term == "linux":
+                    send(b"\x1b.\x1bm\x1b.")
+                else:
+                    send(b"\x1b[1;5C\x1b[1;6C")
+                copied = send(b"\x03")   # Ctrl+C
+                assert (b"\x1b]52;c;YmV0YQ==\x07" in copied) == (term != "linux"), copied
+                send(b"\x0b\x16\x13")    # Ctrl+K, Ctrl+V, Ctrl+S
+                with open(path, encoding="utf-8") as f:
+                    actual = f.read()
+                    assert actual == "betakeep\n", (term, actual)
+
+                if term == "linux":
+                    send(b"\x1b<\x1bd")  # Go to buffer start, delete word right
+                else:
+                    send(b"\x1b[1;5H\x1b[3;5~")
+                send(b"\x1b[20")
+                send(b"0~new\nline\x1b[2")
+                send(b"01~\x13")
+                with open(path, encoding="utf-8") as f:
+                    actual = f.read()
+                    assert actual == "new\nline\n", (term, actual)
+
+                os.write(master, b"\x11")
+                proc.wait(timeout=2)
+                assert proc.returncode == 0
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=2)
+                os.close(master)
+    print("[PASS] Standard shortcuts, OSC 52, console clipboard and split paste framing")
+
+
 if __name__ == "__main__":
     test_cli_version()
     test_cli_config_check()
@@ -465,3 +522,4 @@ if __name__ == "__main__":
     test_pty_plus_line_col()
     test_pty_arrow_keys()
     test_pty_delete_word_left()
+    test_pty_standard_keys()

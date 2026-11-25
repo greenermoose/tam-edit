@@ -119,6 +119,7 @@ static void update_goal_col(editor_t *ed)
 
 static void cursor_move_single(editor_t *ed, long dx, long dy, bool select)
 {
+    if (select && !ed->sel.active) update_selection(ed, true);
     if (!select && ed->sel.active && dx != 0 && dy == 0) {
         loc_t start, end;
         selection_get_range(ed, &start, &end);
@@ -286,6 +287,7 @@ void cursor_move(editor_t *ed, long dx, long dy, bool select)
 
 static void cursor_home_single(editor_t *ed, bool select)
 {
+    if (select && !ed->sel.active) update_selection(ed, true);
     /* Toggle between first non-whitespace and col 0 */
     size_t runes = cur_line_runes(ed);
     const char *line = ed->doc.lines[ed->cx_line];
@@ -326,8 +328,34 @@ void cursor_home(editor_t *ed, bool select)
     editor_ensure_cursor_visible(ed);
 }
 
+static void line_start_single(editor_t *ed, bool select)
+{
+    if (select && !ed->sel.active) update_selection(ed, true);
+    ed->cx_col = 0;
+    update_goal_col(ed);
+    update_selection(ed, select);
+}
+
+void cursor_line_start(editor_t *ed, bool select)
+{
+    line_start_single(ed, select);
+    if (ed->extra_count > 0) {
+        size_t n = ed->extra_count;
+        ed->extra_count = 0;
+        for (size_t i = 0; i < n; i++) {
+            swap_primary_with_extra(ed, i);
+            line_start_single(ed, select);
+            swap_primary_with_extra(ed, i);
+        }
+        ed->extra_count = n;
+        editor_merge_cursors(ed);
+    }
+    editor_ensure_cursor_visible(ed);
+}
+
 static void cursor_end_single(editor_t *ed, bool select)
 {
+    if (select && !ed->sel.active) update_selection(ed, true);
     ed->cx_col = cur_line_runes(ed);
     update_goal_col(ed);
     update_selection(ed, select);
@@ -358,6 +386,7 @@ void cursor_page(editor_t *ed, long pages, int text_rows, bool select)
 
 void cursor_start(editor_t *ed, bool select)
 {
+    if (select && !ed->sel.active) update_selection(ed, true);
     ed->extra_count = 0;
     ed->cx_line = 0;
     ed->cx_col = 0;
@@ -368,6 +397,7 @@ void cursor_start(editor_t *ed, bool select)
 
 void cursor_end_doc(editor_t *ed, bool select)
 {
+    if (select && !ed->sel.active) update_selection(ed, true);
     ed->extra_count = 0;
     if (ed->doc.count > 0) {
         ed->cx_line = ed->doc.count - 1;
@@ -380,6 +410,7 @@ void cursor_end_doc(editor_t *ed, bool select)
 
 void cursor_word_left_single(editor_t *ed, bool select)
 {
+    if (select && !ed->sel.active) update_selection(ed, true);
     if (ed->cx_col == 0) {
         if (ed->cx_line > 0) {
             ed->cx_line--;
@@ -431,8 +462,9 @@ void cursor_word_left(editor_t *ed, bool select)
     editor_ensure_cursor_visible(ed);
 }
 
-static void cursor_word_right_single(editor_t *ed, bool select)
+void cursor_word_right_single(editor_t *ed, bool select)
 {
+    if (select && !ed->sel.active) update_selection(ed, true);
     size_t runes = cur_line_runes(ed);
     if (ed->cx_col >= runes) {
         if (ed->cx_line + 1 < ed->doc.count) {

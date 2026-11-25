@@ -1,6 +1,6 @@
 # Command bar
 
-The command bar is opened by pressing `Ctrl-e`. It is a single-line buffer,
+The command palette is opened by pressing `Ctrl+E`. It is a single-line buffer,
 meaning that all keybindings from a normal buffer are supported (as well
 as mouse and selection).
 
@@ -13,12 +13,12 @@ does not look up environment variables.
 # Commands
 
 tam-edit provides the following commands that can be executed at the command-bar
-by pressing `Ctrl-e` and entering the command. Arguments are placed in single
+by pressing `Ctrl+E` and entering the command. Arguments are placed in single
 quotes here but these are not necessary when entering the command in tam-edit.
 
 * `bind 'key' 'action'`: creates a keybinding from key to action. See the
    `keybindings` documentation for more information about binding keys.
-   This command will modify `bindings.json` and overwrite any bindings to
+   This command updates the bindings section of `settings.ini` and overwrite any bindings to
    `key` that already exist.
 
 * `help ['topic'] ['flags']`: opens the corresponding help topics.
@@ -84,7 +84,7 @@ quotes here but these are not necessary when entering the command in tam-edit.
 * `show 'option'`: shows the current value of the given option.
 
 * `showkey 'key'`: Show the action(s) bound to a given key. For example
-   running `> showkey Ctrl-c` will display `Copy`.
+   running `> showkey Ctrl+C` reports the copy action.
 
 * `run 'sh-command'`: runs the given shell command in the background. The
    command's output will be displayed in one line when it finishes running.

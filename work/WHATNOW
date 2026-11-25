@@ -3,7 +3,7 @@ WHATNOW
 What tam-edit is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-22, with W6
+Updated: 2026-11-25, with W7
 
 
 STATE
@@ -15,7 +15,7 @@ STATE
   fork of micro, the Go version on master, branches c11 and test) is
   archived read-only at greenermoose/tam-edit-micro-fork. Commit hashes
   in older records, R1-cursor-movement.md included, are in that
-  archive. VERSION reads 1.0.6 (the footer shows it).
+  archive. VERSION reads 1.1.0 (the footer shows it).
 
   All five migration milestones are complete (ROADMAP.md, 1.0.0 on
   2026-11-13): editing, views and configuration, syntax highlighting,
@@ -33,6 +33,10 @@ STATE
   W6), and #8 (Unicode-aware word classes, W6).
 
 
+  W7 adopts the Tamlinux default key map, named action palette, and
+  Linux console fallbacks. The editor keeps the existing INI binding
+  format. See arch/keys.md.
+
 NEXT
 
   1. Next review or feature slice chosen by Fred (all R1 findings are
@@ -49,8 +53,7 @@ NEXT
 
 WAITING FOR FRED
 
-  - What to work on next for tam-edit now that reviews/R1-cursor-movement.md
-    is completely closed.
+  - Next feature or review chosen by Fred.
 
 
 WATCH OUT

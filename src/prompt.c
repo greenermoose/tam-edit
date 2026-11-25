@@ -3,6 +3,7 @@
 #include "actions.h"
 #include "buffer.h"
 #include "complete.h"
+#include "clipboard.h"
 #include "cursor.h"
 #include "encoding.h"
 #include "help_data.h"
@@ -53,7 +54,8 @@ static void history_push(prompt_history_t *h, const char *line)
 static prompt_history_t *history_for_kind(editor_t *ed, prompt_kind_t kind)
 {
     switch (kind) {
-    case PROMPT_COMMAND:      return &ed->hist_cmd;
+    case PROMPT_COMMAND:
+    case PROMPT_PALETTE:      return &ed->hist_cmd;
     case PROMPT_FIND:
     case PROMPT_FIND_LITERAL: return &ed->hist_find;
     case PROMPT_SHELL:        return &ed->hist_shell;
@@ -99,6 +101,7 @@ void prompt_close(editor_t *ed)
 {
     prompt_comp_clear(&ed->prompt);
     memset(&ed->prompt, 0, sizeof(ed->prompt));
+    ed->message[0] = 0;
 }
 
 void prompt_open_command(editor_t *ed)
@@ -108,6 +111,41 @@ void prompt_open_command(editor_t *ed)
     ed->prompt.active = true;
     snprintf(ed->prompt.label, sizeof(ed->prompt.label), "> ");
     ed->hist_cmd.cursor = -1;
+}
+
+void prompt_open_palette(editor_t *ed)
+{
+    prompt_open_command(ed);
+    ed->prompt.kind = PROMPT_PALETTE;
+    snprintf(ed->prompt.label, sizeof(ed->prompt.label), "Execute: ");
+}
+
+static const char *palette_match(const char *query, size_t index, size_t *count)
+{
+    const char *match = NULL;
+    const char *name;
+    size_t found = 0;
+    for (size_t i = 0; (name = actions_name_at(i)); i++) {
+        if (!*name || !strcasestr(name, query)) continue;
+        if (found++ == index) match = name;
+    }
+    if (count) *count = found;
+    return match;
+}
+
+const char *prompt_palette_match(const prompt_t *p)
+{
+    return palette_match(p->buf, p->palette_index, NULL);
+}
+
+void prompt_open_confirm_close(editor_t *ed)
+{
+    prompt_close(ed);
+    ed->prompt.kind = PROMPT_CONFIRM_CLOSE;
+    ed->prompt.view_id = ed->active_view->id;
+    ed->prompt.active = true;
+    snprintf(ed->prompt.label, sizeof(ed->prompt.label),
+             "Discard unsaved edits and close? (y/n) ");
 }
 
 void prompt_open_command_prefill(editor_t *ed, const char *prefill)
@@ -186,10 +224,12 @@ void prompt_open_replace_confirm(editor_t *ed)
              "Replace? (y)es / (n)o / (a)ll / (esc)quit: ");
 }
 
-void prompt_open_confirm_reload(editor_t *ed, const char *path)
+void prompt_open_confirm_reload(editor_t *ed, const char *path, bool manual)
 {
     prompt_close(ed);
     ed->prompt.kind = PROMPT_CONFIRM_RELOAD;
+    ed->prompt.manual_reload = manual;
+    if (ed->active_view) ed->prompt.view_id = ed->active_view->id;
     ed->prompt.active = true;
     if (path) {
         snprintf(ed->prompt.payload, sizeof(ed->prompt.payload), "%s", path);
@@ -197,7 +237,8 @@ void prompt_open_confirm_reload(editor_t *ed, const char *path)
     const char *base = path ? strrchr(path, '/') : NULL;
     const char *disp = base ? (base + 1) : (path ? path : "file");
     snprintf(ed->prompt.label, sizeof(ed->prompt.label),
-             "'%s' changed on disk. Reload? (y/n): ", disp);
+             manual ? "Discard unsaved edits in '%s' and reload? (y/n) "
+                    : "'%s' changed on disk. Reload? (y/n) ", disp);
 }
 
 void prompt_open_show_key(editor_t *ed)
@@ -618,6 +659,11 @@ void prompt_execute_command(editor_t *ed, const char *cmd)
     }
 
     const char *op = argv[0];
+    if ((strcmp(op, "replace") == 0 || strcmp(op, "replaceall") == 0) &&
+        ed->active_view && ed->active_view->buf->readonly) {
+        shell_split_free(argv, argc);
+        return;
+    }
 
     if (strcmp(op, "quit") == 0 || strcmp(op, "q") == 0) {
         if (has_dirty_non_scratch_tab(ed)) {
@@ -945,6 +991,8 @@ static void submit_prompt(editor_t *ed)
 {
     prompt_t *p = &ed->prompt;
     prompt_kind_t kind = p->kind;
+    const char *picked = kind == PROMPT_PALETTE ? prompt_palette_match(p) : NULL;
+    bool selected = p->palette_selected || p->len == 0;
     char buf[512];
     snprintf(buf, sizeof(buf), "%s", p->buf);
 
@@ -954,6 +1002,18 @@ static void submit_prompt(editor_t *ed)
     prompt_close(ed);
 
     switch (kind) {
+    case PROMPT_PALETTE:
+        if (selected && picked) {
+            actions_execute(ed, picked);
+            break;
+        }
+        if (actions_execute(ed, buf)) break;
+        if (picked && !prompt_is_command(buf)) {
+            actions_execute(ed, picked);
+            break;
+        }
+        /* Fall through to the command parser for commands with arguments. */
+        /* fall through */
     case PROMPT_COMMAND:
         prompt_execute_command(ed, buf);
         break;
@@ -1004,10 +1064,269 @@ static void submit_prompt(editor_t *ed)
     }
 }
 
+static void palette_step(prompt_t *p, int direction)
+{
+    size_t count;
+    palette_match(p->buf, 0, &count);
+    if (!count) return;
+    if (!p->palette_selected) {
+        p->palette_index = direction < 0 ? count - 1 : 0;
+    } else {
+        p->palette_index = direction < 0 ? (p->palette_index + count - 1) % count
+                                         : (p->palette_index + 1) % count;
+    }
+    p->palette_selected = true;
+}
+
+static void prompt_changed(editor_t *ed)
+{
+    prompt_t *p = &ed->prompt;
+    ed->message[0] = 0;
+    p->palette_index = 0;
+    p->palette_selected = false;
+    p->selecting = false;
+    p->mark = false;
+    prompt_comp_clear(p);
+    if (p->kind == PROMPT_FIND || p->kind == PROMPT_FIND_LITERAL)
+        search_inc_update(ed, true);
+}
+
+static void snapshot_push(const prompt_t *p, prompt_snapshot_t *stack, size_t *count)
+{
+    if (*count == PROMPT_UNDO_MAX) {
+        memmove(stack, stack + 1, (PROMPT_UNDO_MAX - 1) * sizeof(*stack));
+        (*count)--;
+    }
+    prompt_snapshot_t *snap = &stack[(*count)++];
+    memcpy(snap->text, p->buf, p->len + 1);
+    snap->cx = p->cx;
+}
+
+static void prompt_undo(editor_t *ed, bool redo)
+{
+    prompt_t *p = &ed->prompt;
+    prompt_snapshot_t *from = redo ? p->redo : p->undo;
+    size_t *count = redo ? &p->redo_count : &p->undo_count;
+    if (!*count) return;
+    snapshot_push(p, redo ? p->undo : p->redo, redo ? &p->undo_count : &p->redo_count);
+    const prompt_snapshot_t *snap = &from[--*count];
+    p->len = strlen(snap->text);
+    memcpy(p->buf, snap->text, p->len + 1);
+    p->cx = snap->cx;
+    prompt_changed(ed);
+}
+
+static void prompt_range(const prompt_t *p, size_t *start, size_t *end)
+{
+    *start = *end = p->cx;
+    if (!p->selecting) return;
+    if (p->anchor < p->cx) *start = p->anchor;
+    else *end = p->anchor;
+}
+
+static void prompt_change(editor_t *ed, size_t start, size_t end,
+                          const char *text, size_t len)
+{
+    prompt_t *p = &ed->prompt;
+    size_t left = edit_rune_to_byte(p->buf, p->len, start);
+    size_t right = edit_rune_to_byte(p->buf, p->len, end);
+    size_t retained = p->len - (right - left);
+    if ((left == right && len == 0) || len >= sizeof(p->buf) - retained) return;
+    snapshot_push(p, p->undo, &p->undo_count);
+    p->redo_count = 0;
+    memmove(p->buf + left + len, p->buf + right, p->len - right + 1);
+    if (len) memcpy(p->buf + left, text, len);
+    p->len = retained + len;
+    p->cx = start + (len ? edit_line_runes(text, len) : 0);
+    prompt_changed(ed);
+}
+
+void prompt_paste_text(editor_t *ed, const char *text, size_t len)
+{
+    prompt_t *p = &ed->prompt;
+    switch (p->kind) {
+    case PROMPT_COMMAND: case PROMPT_PALETTE: case PROMPT_FIND:
+    case PROMPT_FIND_LITERAL: case PROMPT_GOTO: case PROMPT_SAVE_AS:
+    case PROMPT_SHELL: break;
+    default: return;
+    }
+
+    size_t start, end;
+    prompt_range(p, &start, &end);
+    size_t removed = edit_rune_to_byte(p->buf, p->len, end) -
+                     edit_rune_to_byte(p->buf, p->len, start);
+    size_t room = sizeof(p->buf) - 1 - p->len + removed;
+    char clean[sizeof(p->buf)];
+    size_t written = 0;
+    for (size_t i = 0; i < len && written < room;) {
+        uint32_t cp;
+        size_t used = tam_utf8_decode(text + i, len - i, &cp);
+        if (!used) break;
+        i += used;
+        if (cp == '\r' && i < len && text[i] == '\n') i++;
+        if (cp == '\r' || cp == '\n' || cp == '\t') cp = ' ';
+        if (cp < 0x20 || cp == 0x7F) continue;
+        char encoded[4];
+        size_t count = tam_utf8_encode(cp, encoded);
+        if (count > room - written) break;
+        memcpy(clean + written, encoded, count);
+        written += count;
+    }
+    if (written) prompt_change(ed, start, end, clean, written);
+}
+
+static int prompt_word_class(const prompt_t *p, size_t col)
+{
+    size_t byte = edit_rune_to_byte(p->buf, p->len, col);
+    uint32_t cp = 0;
+    tam_utf8_decode(p->buf + byte, p->len - byte, &cp);
+    if (edit_is_space_char(cp)) return 0;
+    return edit_is_word_char(cp) ? 1 : 2;
+}
+
+static size_t prompt_word_edge(const prompt_t *p, size_t col, bool right, size_t end)
+{
+    if (right) {
+        if (col == end) return col;
+        int category = prompt_word_class(p, col);
+        while (col < end && prompt_word_class(p, col) == category) col++;
+        while (col < end && prompt_word_class(p, col) == 0) col++;
+    } else {
+        while (col > 0 && prompt_word_class(p, col - 1) == 0) col--;
+        if (col == 0) return col;
+        int category = prompt_word_class(p, col - 1);
+        while (col > 0 && prompt_word_class(p, col - 1) == category) col--;
+    }
+    return col;
+}
+
+static void prompt_move(prompt_t *p, size_t col, bool extend)
+{
+    if ((extend || p->mark) && !p->selecting) p->anchor = p->cx;
+    p->selecting = extend || p->mark;
+    p->cx = col;
+}
+
+static void prompt_edit_key(editor_t *ed, const tam_key_event_t *ev)
+{
+    prompt_t *p = &ed->prompt;
+    size_t last = edit_line_runes(p->buf, p->len);
+    size_t start, end;
+    prompt_range(p, &start, &end);
+    unsigned mods = ev->mods;
+    unsigned base = mods & ~TAM_MOD_SHIFT;
+    bool extend = (mods & TAM_MOD_SHIFT) != 0;
+    uint32_t ch = ev->codepoint;
+
+    if (ev->type == TAM_KEY_CHAR && mods == TAM_MOD_CTRL) {
+        switch (ch) {
+        case 'a':
+            p->anchor = 0;
+            p->cx = last;
+            p->selecting = true;
+            return;
+        case 'c': case 'x': {
+            if (start == end) { start = 0; end = last; }
+            size_t left = edit_rune_to_byte(p->buf, p->len, start);
+            size_t right = edit_rune_to_byte(p->buf, p->len, end);
+            if (right > left && clipboard_set(p->buf + left, right - left, ed->tty_out_fd) && ch == 'x')
+                prompt_change(ed, start, end, NULL, 0);
+            return;
+        }
+        case 'v': {
+            size_t len;
+            char *text = clipboard_get(&len);
+            if (text) prompt_paste_text(ed, text, len);
+            free(text);
+            return;
+        }
+        case 'k': prompt_change(ed, 0, last, NULL, 0); return;
+        case 'l': ed->force_redraw = true; return;
+        case 'z': case 'y': prompt_undo(ed, ch == 'y'); return;
+        default: return;
+        }
+    }
+
+    if (ev->type == TAM_KEY_CHAR && mods == TAM_MOD_ALT && ch == 'm') {
+        p->mark = !p->mark;
+        p->selecting = false;
+        return;
+    }
+
+    bool left = ev->type == TAM_KEY_LEFT && (base == 0 || base == TAM_MOD_CTRL);
+    bool right = ev->type == TAM_KEY_RIGHT && (base == 0 || base == TAM_MOD_CTRL);
+    bool alt_word = ev->type == TAM_KEY_CHAR && mods == TAM_MOD_ALT && (ch == ',' || ch == '.');
+    if (left || right || alt_word) {
+        right |= alt_word && ch == '.';
+        size_t col = p->cx;
+        if (base == TAM_MOD_CTRL || alt_word) col = prompt_word_edge(p, col, right, last);
+        else if (right && col < last) col++;
+        else if (!right && col > 0) col--;
+        prompt_move(p, col, extend);
+        return;
+    }
+    bool home = ev->type == TAM_KEY_HOME || (ev->type == TAM_KEY_CHAR && mods == TAM_MOD_ALT && ch == '<');
+    bool tail = ev->type == TAM_KEY_END || (ev->type == TAM_KEY_CHAR && mods == TAM_MOD_ALT && ch == '>');
+    if ((home || tail) && (base == 0 || base == TAM_MOD_CTRL || ev->type == TAM_KEY_CHAR)) {
+        prompt_move(p, home ? 0 : last, extend);
+        return;
+    }
+
+    bool back = ev->type == TAM_KEY_BACKSPACE && (mods == 0 || mods == TAM_MOD_ALT || mods == TAM_MOD_CTRL);
+    bool del = ev->type == TAM_KEY_DELETE && (mods == 0 || mods == TAM_MOD_CTRL);
+    bool alt_del = ev->type == TAM_KEY_CHAR && mods == TAM_MOD_ALT && ch == 'd';
+    if (back || del || alt_del) {
+        if (start == end) {
+            if (mods != 0) {
+                if (back) start = prompt_word_edge(p, start, false, last);
+                else end = prompt_word_edge(p, end, true, last);
+            } else if (back && start > 0) start--;
+            else if (del && end < last) end++;
+        }
+        prompt_change(ed, start, end, NULL, 0);
+        return;
+    }
+
+    if (ev->type == TAM_KEY_CHAR && (mods == 0 || mods == TAM_MOD_SHIFT) && ch >= 0x20 && ch != 0x7F) {
+        char utf8[4];
+        size_t n = tam_utf8_encode(ch, utf8);
+        if (n) prompt_change(ed, start, end, utf8, n);
+    }
+}
+
 bool prompt_handle_key(editor_t *ed, const tam_key_event_t *ev)
 {
     prompt_t *p = &ed->prompt;
     if (!p->active) return false;
+
+    if (ev->type == TAM_KEY_CHAR && ev->codepoint == 'g' && ev->mods == TAM_MOD_CTRL &&
+        p->kind != PROMPT_SHOW_KEY) {
+        const char *help = "Enter submits, Escape cancels, Ctrl+A selects all";
+        if (p->kind == PROMPT_PALETTE) help = "Type to filter, Up/Down selects, Enter runs, Escape cancels";
+        if (p->kind == PROMPT_REPLACE_CONFIRM) help = "Y replaces, N skips, A replaces all, Escape stops";
+        if (p->kind == PROMPT_CONFIRM_CLOSE || p->kind == PROMPT_CONFIRM_RELOAD ||
+            p->kind == PROMPT_QUIT_CONFIRM) help = "Y confirms, N declines, Escape cancels";
+        editor_set_message(ed, "%s", help);
+        return true;
+    }
+
+    if ((p->kind == PROMPT_CONFIRM_CLOSE || p->kind == PROMPT_CONFIRM_RELOAD) &&
+        (!ed->active_view || ed->active_view->id != p->view_id)) {
+        prompt_close(ed);
+        return true;
+    }
+    if (p->kind == PROMPT_CONFIRM_CLOSE) {
+        if (ev->type == TAM_KEY_ESC ||
+            (ev->type == TAM_KEY_CHAR && !ev->mods && tolower((unsigned char)ev->codepoint) == 'n')) {
+            prompt_close(ed);
+            editor_set_message(ed, "Cancelled");
+        } else if (ev->type == TAM_KEY_CHAR && !ev->mods &&
+                   tolower((unsigned char)ev->codepoint) == 'y') {
+            prompt_close(ed);
+            editor_close_current(ed, true);
+        }
+        return true;
+    }
 
     if (p->kind == PROMPT_SHOW_KEY) {
         char kname[64] = "";
@@ -1036,15 +1355,15 @@ bool prompt_handle_key(editor_t *ed, const tam_key_event_t *ev)
 
     if (p->kind == PROMPT_CONFIRM_RELOAD) {
         if (ev->type == TAM_KEY_ESC ||
-            (ev->type == TAM_KEY_CHAR && (ev->codepoint == 'n' || ev->codepoint == 'N'))) {
-            if (ed->active_view && ed->active_view->buf) {
+            (ev->type == TAM_KEY_CHAR && !ev->mods && (ev->codepoint == 'n' || ev->codepoint == 'N'))) {
+            if (!p->manual_reload && ed->active_view && ed->active_view->buf) {
                 ed->active_view->buf->mtime_valid = false;
             }
             prompt_close(ed);
             editor_set_message(ed, "Kept current buffer");
             return true;
         }
-        if (ev->type == TAM_KEY_CHAR && (ev->codepoint == 'y' || ev->codepoint == 'Y')) {
+        if (ev->type == TAM_KEY_CHAR && !ev->mods && (ev->codepoint == 'y' || ev->codepoint == 'Y')) {
             prompt_close(ed);
             editor_reopen(ed, NULL);
             return true;
@@ -1058,7 +1377,7 @@ bool prompt_handle_key(editor_t *ed, const tam_key_event_t *ev)
             editor_set_message(ed, "Cancelled");
             return true;
         }
-        if (ev->type == TAM_KEY_CHAR) {
+        if (ev->type == TAM_KEY_CHAR && !ev->mods) {
             if (ev->codepoint == 'y' || ev->codepoint == 'Y') {
                 prompt_close(ed);
                 if (ed->path != NULL && ed->path[0] != '\0') {
@@ -1089,94 +1408,32 @@ bool prompt_handle_key(editor_t *ed, const tam_key_event_t *ev)
         return true;
     }
 
-    if (ev->type == TAM_KEY_ENTER) {
+    if (ev->type == TAM_KEY_ENTER && ev->mods == 0) {
         submit_prompt(ed);
         return true;
     }
-
-    if (ev->type == TAM_KEY_TAB && (p->kind == PROMPT_COMMAND || p->kind == PROMPT_SAVE_AS)) {
-        int dir = (ev->mods & TAM_MOD_SHIFT) ? -1 : 1;
-        prompt_complete_step(ed, dir);
-        return true;
-    }
-
-    if (ev->type == TAM_KEY_UP) {
-        history_step(ed, -1);
-        return true;
-    }
-
-    if (ev->type == TAM_KEY_DOWN) {
-        history_step(ed, 1);
-        return true;
-    }
-
-    if (ev->type == TAM_KEY_LEFT) {
-        if (p->cx > 0) p->cx--;
-        return true;
-    }
-
-    if (ev->type == TAM_KEY_RIGHT) {
-        size_t runes = edit_line_runes(p->buf, p->len);
-        if (p->cx < runes) p->cx++;
-        return true;
-    }
-
-    if (ev->type == TAM_KEY_HOME) {
-        p->cx = 0;
-        return true;
-    }
-
-    if (ev->type == TAM_KEY_END) {
-        p->cx = edit_line_runes(p->buf, p->len);
-        return true;
-    }
-
-    if (ev->type == TAM_KEY_BACKSPACE) {
-        prompt_comp_clear(p);
-        if (p->cx > 0) {
-            size_t b_from = edit_rune_to_byte(p->buf, p->len, p->cx - 1);
-            size_t b_to   = edit_rune_to_byte(p->buf, p->len, p->cx);
-            memmove(p->buf + b_from, p->buf + b_to, p->len - b_to + 1);
-            p->len -= (b_to - b_from);
-            p->cx--;
-            if (p->kind == PROMPT_FIND || p->kind == PROMPT_FIND_LITERAL) {
-                search_inc_update(ed, true);
-            }
+    if (ev->type == TAM_KEY_TAB &&
+        (ev->mods == 0 || ev->mods == TAM_MOD_SHIFT) &&
+        (p->kind == PROMPT_COMMAND || p->kind == PROMPT_SAVE_AS ||
+         p->kind == PROMPT_PALETTE)) {
+        if (p->kind == PROMPT_PALETTE && !strchr(p->buf, ' ')) {
+            ed->message[0] = 0;
+            palette_step(p, ev->mods == TAM_MOD_SHIFT ? -1 : 1);
         }
+        else
+            prompt_complete_step(ed, ev->mods == TAM_MOD_SHIFT ? -1 : 1);
         return true;
     }
-
-    if (ev->type == TAM_KEY_DELETE) {
-        prompt_comp_clear(p);
-        size_t runes = edit_line_runes(p->buf, p->len);
-        if (p->cx < runes) {
-            size_t b_from = edit_rune_to_byte(p->buf, p->len, p->cx);
-            size_t b_to   = edit_rune_to_byte(p->buf, p->len, p->cx + 1);
-            memmove(p->buf + b_from, p->buf + b_to, p->len - b_to + 1);
-            p->len -= (b_to - b_from);
-            if (p->kind == PROMPT_FIND || p->kind == PROMPT_FIND_LITERAL) {
-                search_inc_update(ed, true);
-            }
+    if ((ev->type == TAM_KEY_UP || ev->type == TAM_KEY_DOWN) && ev->mods == 0) {
+        int dir = ev->type == TAM_KEY_UP ? -1 : 1;
+        if (p->kind == PROMPT_PALETTE) {
+            ed->message[0] = 0;
+            palette_step(p, dir);
         }
+        else history_step(ed, dir);
         return true;
     }
 
-    if (ev->type == TAM_KEY_CHAR && (ev->mods == 0 || ev->mods == TAM_MOD_SHIFT)) {
-        prompt_comp_clear(p);
-        char utf8[4];
-        size_t n = tam_utf8_encode(ev->codepoint, utf8);
-        if (p->len + n < sizeof(p->buf)) {
-            size_t b_at = edit_rune_to_byte(p->buf, p->len, p->cx);
-            memmove(p->buf + b_at + n, p->buf + b_at, p->len - b_at + 1);
-            memcpy(p->buf + b_at, utf8, n);
-            p->len += n;
-            p->cx++;
-            if (p->kind == PROMPT_FIND || p->kind == PROMPT_FIND_LITERAL) {
-                search_inc_update(ed, true);
-            }
-        }
-        return true;
-    }
-
+    prompt_edit_key(ed, ev);
     return true;
 }

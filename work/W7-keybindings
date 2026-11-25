@@ -1,0 +1,31 @@
+W7 TAMLINUX KEYBINDINGS
+
+Date: 2026-11-25
+AI harness: codex 0.172.0
+AI model: gpt-6.2-sol
+Transcript: Retained privately by the author.
+
+GUIDANCE
+
+  Fred: "Update tam-edit to abide by the new keybinding standards
+  defined in tamlinux/arch/keybindings.md"
+  Fred chose the settled shortcuts and existing INI binding format.
+  Fred: "Implement the plan."
+
+DONE
+
+  - Adopted the standard default map, command palette, guidance,
+    console fallbacks, and physical chord names in tam-edit 1.1.0.
+  - Kept existing bindings and actions loadable and fixed selection
+    anchors, clipboard framing, and view lifetime on close.
+  - Unit, sanitizer, PTY, and dependency checks passed.
+
+FAILED
+
+  - The inherited config affected the first PTY run. This is now
+    isolated. LeakSanitizer required execution outside the sandbox.
+
+HANDOFF
+
+  - arch/keys.md records editor-specific shortcuts. PTY coverage
+    supplies both xterm and Linux console input sequences.

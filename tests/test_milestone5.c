@@ -3,6 +3,7 @@
 #include "cursor.h"
 #include "editor.h"
 #include "pane.h"
+#include "prompt.h"
 #include "ported_buffer_fixtures.h"
 #include "render.h"
 #include "syntax.h"
@@ -14,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define M5_CHECK(cond) do {                                             \
     if (!(cond)) {                                                      \
@@ -292,10 +294,10 @@ static void test_parity_ctrl_g_help(void)
     editor_t ed;
     editor_init(&ed);
 
-    /* Ctrl-h opens help, pressing Ctrl-h again closes it */
+    /* Ctrl+G opens help, pressing Ctrl+G again closes it */
     tam_key_event_t ev = {0};
     ev.type = TAM_KEY_CHAR;
-    ev.codepoint = 'h';
+    ev.codepoint = 'g';
     ev.mods = TAM_MOD_CTRL;
     M5_CHECK(actions_handle_key(&ed, &ev, 24));
     M5_CHECK(ed.active_view != NULL && ed.active_view->buf != NULL && ed.active_view->buf->scratch);
@@ -303,21 +305,19 @@ static void test_parity_ctrl_g_help(void)
     M5_CHECK(actions_handle_key(&ed, &ev, 24));
     M5_CHECK(ed.active_view != NULL && ed.active_view->buf != NULL && !ed.active_view->buf->scratch);
 
-    /* Ctrl-h opens help, Esc closes it */
+    /* Ctrl+G opens help, Esc closes it */
     M5_CHECK(actions_handle_key(&ed, &ev, 24));
     M5_CHECK(ed.active_view != NULL && ed.active_view->buf != NULL && ed.active_view->buf->scratch);
     tam_key_event_t esc = {.type = TAM_KEY_ESC, .codepoint = 0, .mods = 0};
     M5_CHECK(actions_handle_key(&ed, &esc, 24));
     M5_CHECK(ed.active_view != NULL && ed.active_view->buf != NULL && !ed.active_view->buf->scratch);
 
-    /* Alt-g opens live keybindings help listing all bindings */
-    ev.codepoint = 'g';
-    ev.mods = TAM_MOD_ALT;
+    /* Guidance lists the canonical action names. */
     M5_CHECK(actions_handle_key(&ed, &ev, 24));
     M5_CHECK(ed.active_view != NULL && ed.active_view->buf != NULL && ed.active_view->buf->scratch);
     bool found_multi = false;
     for (size_t i = 0; i < ed.doc.count; i++) {
-        if (strstr(ed.doc.lines[i], "SpawnMultiCursor") != NULL) {
+        if (strstr(ed.doc.lines[i], "spawn-multi-cursor") != NULL) {
             found_multi = true;
             break;
         }
@@ -336,12 +336,106 @@ static void test_parity_ctrl_g_help(void)
         row23[c] = (cp >= 0x20 && cp < 0x7f) ? (char)cp : '?';
     }
     row23[80] = '\0';
-    M5_CHECK(strstr(row23, "^S Save") != NULL);
-    M5_CHECK(strstr(row23, "M-G Keys") != NULL);
+    M5_CHECK(strstr(row23, "Ctrl+S Save") != NULL);
+    M5_CHECK(strstr(row23, "Ctrl+G Guidance") != NULL);
     renderer_free(&ren);
 
     editor_free(&ed);
     printf("  [PASS] test_parity_ctrl_g_help\n");
+}
+
+static void editor_key(editor_t *ed, tam_key_type_t type, uint32_t ch, unsigned mods)
+{
+    tam_key_event_t event = {type, ch, mods};
+    if (ed->prompt.active) prompt_handle_key(ed, &event);
+    else actions_handle_key(ed, &event, 24);
+}
+
+static void test_standard_actions(void)
+{
+    editor_t ed;
+    editor_init(&ed);
+    keybinds_free(ed.keybindings);
+    ed.keybindings = NULL;
+    const char *map[] = {
+        "select-all", NULL, "copy", "close", "execute", "find", "guidance",
+        NULL, NULL, NULL, "kill-line", "clear-screen", NULL, "new", "open",
+        NULL, "quit", "replace", "save", NULL, "update", "paste", NULL,
+        "cut", "redo", "undo",
+    };
+    for (size_t i = 0; i < sizeof(map) / sizeof(map[0]); i++) {
+        tam_key_event_t event = {TAM_KEY_CHAR, 'a' + i, TAM_MOD_CTRL};
+        const char *name = actions_lookup_key_description(&ed, &event);
+        M5_CHECK(map[i] ? name && strcmp(name, map[i]) == 0 : name == NULL);
+    }
+    tam_key_type_t key;
+    uint32_t ch;
+    unsigned mods;
+    M5_CHECK(keybind_parse_string("Ctrl+F", &key, &ch, &mods));
+    M5_CHECK(key == TAM_KEY_CHAR && ch == 'f' && mods == TAM_MOD_CTRL);
+    M5_CHECK(keybind_parse_string("Alt+Shift+J", &key, &ch, &mods));
+    M5_CHECK(key == TAM_KEY_CHAR && ch == 'J' && mods == TAM_MOD_ALT);
+    M5_CHECK(keybind_parse_string("Ctrl-Left", &key, &ch, &mods));
+    M5_CHECK(key == TAM_KEY_LEFT && mods == TAM_MOD_CTRL);
+
+    editor_key(&ed, TAM_KEY_CHAR, 'e', TAM_MOD_CTRL);
+    for (const char *text = "ruler"; *text; text++) editor_key(&ed, TAM_KEY_CHAR, *text, 0);
+    M5_CHECK(strcmp(prompt_palette_match(&ed.prompt), "toggle-ruler") == 0);
+    bool ruler = ed.config.ruler;
+    editor_key(&ed, TAM_KEY_ENTER, 0, 0);
+    M5_CHECK(ed.config.ruler != ruler);
+
+    editor_insert_text(&ed, "unsaved", 7);
+    M5_CHECK(editor_vsplit(&ed, NULL));
+    editor_key(&ed, TAM_KEY_CHAR, 'd', TAM_MOD_CTRL);
+    M5_CHECK(!ed.prompt.active && !strcmp(ed.doc.lines[0], "unsaved"));
+    editor_key(&ed, TAM_KEY_CHAR, 'd', TAM_MOD_CTRL);
+    M5_CHECK(ed.prompt.kind == PROMPT_CONFIRM_CLOSE);
+    editor_key(&ed, TAM_KEY_ESC, 0, 0);
+    M5_CHECK(!strcmp(ed.doc.lines[0], "unsaved"));
+
+    editor_key(&ed, TAM_KEY_CHAR, 'n', TAM_MOD_CTRL);
+    M5_CHECK(ed.tabs.count == 2 && !ed.dirty);
+    editor_key(&ed, TAM_KEY_CHAR, 'q', TAM_MOD_CTRL);
+    M5_CHECK(ed.running && ed.quit_armed);
+    editor_key(&ed, TAM_KEY_CHAR, 'd', TAM_MOD_CTRL);
+    M5_CHECK(ed.tabs.count == 1 && ed.dirty && ed.running);
+    editor_key(&ed, TAM_KEY_CHAR, 'd', TAM_MOD_CTRL);
+    editor_key(&ed, TAM_KEY_CHAR, 'y', 0);
+    M5_CHECK(ed.tabs.count == 1 && !ed.dirty && ed.doc.lens[0] == 0);
+
+    editor_key(&ed, TAM_KEY_CHAR, 'f', TAM_MOD_CTRL);
+    editor_key(&ed, TAM_KEY_CHAR, 'a', 0);
+    editor_key(&ed, TAM_KEY_CHAR, 'a', TAM_MOD_CTRL);
+    editor_key(&ed, TAM_KEY_CHAR, 'b', 0);
+    M5_CHECK(!strcmp(ed.prompt.buf, "b"));
+    editor_key(&ed, TAM_KEY_CHAR, 'z', TAM_MOD_CTRL);
+    M5_CHECK(!strcmp(ed.prompt.buf, "a"));
+    editor_key(&ed, TAM_KEY_CHAR, 'g', TAM_MOD_CTRL);
+    M5_CHECK(strstr(ed.message, "Escape") && ed.prompt.kind == PROMPT_FIND);
+    editor_key(&ed, TAM_KEY_ESC, 0, 0);
+    editor_key(&ed, TAM_KEY_CHAR, 'r', TAM_MOD_CTRL);
+    M5_CHECK(ed.prompt.active && !strcmp(ed.prompt.buf, "replace "));
+    editor_key(&ed, TAM_KEY_ESC, 0, 0);
+
+    char path[] = "/tmp/tam-edit-reload.XXXXXX";
+    int fd = mkstemp(path);
+    M5_CHECK(fd >= 0);
+    M5_CHECK(write(fd, "from disk", 9) == 9);
+    M5_CHECK(close(fd) == 0);
+    M5_CHECK(editor_load(&ed, path));
+    editor_insert_text(&ed, "dirty ", 6);
+    editor_key(&ed, TAM_KEY_CHAR, 'u', TAM_MOD_CTRL);
+    M5_CHECK(ed.prompt.kind == PROMPT_CONFIRM_RELOAD);
+    editor_key(&ed, TAM_KEY_ESC, 0, 0);
+    M5_CHECK(!strcmp(ed.doc.lines[0], "dirty from disk"));
+    editor_key(&ed, TAM_KEY_CHAR, 'u', TAM_MOD_CTRL);
+    editor_key(&ed, TAM_KEY_CHAR, 'y', 0);
+    M5_CHECK(!ed.dirty && !strcmp(ed.doc.lines[0], "from disk"));
+    M5_CHECK(unlink(path) == 0);
+
+    editor_free(&ed);
+    printf("  [PASS] Standard action map, palette, prompts, and dirty close/reload/quit\n");
 }
 
 int run_milestone5_tests(void)
@@ -353,6 +447,7 @@ int run_milestone5_tests(void)
     test_stress_many_cursors();
     test_stress_many_splits();
     test_parity_ctrl_g_help();
+    test_standard_actions();
     printf("All Milestone 5 tests passed.\n");
     return 0;
 }

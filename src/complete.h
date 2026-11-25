@@ -3,6 +3,7 @@
 
 #include "editor.h"
 
+bool prompt_is_command(const char *text);
 void prompt_comp_clear(prompt_t *p);
 bool prompt_complete_step(editor_t *ed, int dir);
 

@@ -2,6 +2,7 @@
 #include "buffer.h"
 #include "complete.h"
 #include "cursor.h"
+#include "prompt.h"
 #include "search.h"
 #include "syntax.h"
 #include "undo.h"
@@ -617,6 +618,7 @@ void editor_set_active_view(editor_t *ed, view_t *v)
     if (v == NULL) return;
     editor_sync_to_active(ed);
     ed->active_view = v;
+    ed->mark = false;
     if (ed->tabs.active < ed->tabs.count) {
         ed->tabs.tabs[ed->tabs.active]->active_view = v;
     }
@@ -1200,8 +1202,8 @@ bool editor_unsplit(editor_t *ed)
     if (cur_node == NULL || cur_node == cur_tab->root) return false;
 
     view_t *next_v = pane_next_view(cur_tab->root, ed->active_view);
-    pane_close(cur_tab->root, cur_node, &cur_tab->root);
     editor_set_active_view(ed, next_v);
+    pane_close(cur_tab->root, cur_node, &cur_tab->root);
     return true;
 }
 
@@ -1263,9 +1265,29 @@ bool editor_add_tab(editor_t *ed, const char *path)
 bool editor_close_tab(editor_t *ed)
 {
     if (ed->tabs.count <= 1) return false;
+    editor_sync_to_active(ed);
+    ed->active_view = NULL;
     tab_list_close(&ed->tabs, ed->tabs.active);
     tab_t *cur = ed->tabs.tabs[ed->tabs.active];
     editor_set_active_view(ed, cur->active_view);
+    return true;
+}
+
+bool editor_close_current(editor_t *ed, bool discard)
+{
+    if (!ed->active_view || ed->tabs.count == 0) return false;
+    buffer_t *buf = ed->active_view->buf;
+    if (!discard && ed->dirty && buf->refcount <= 1) {
+        prompt_open_confirm_close(ed);
+        return false;
+    }
+
+    if (editor_unsplit(ed)) return true;
+    if (ed->tabs.count > 1) return editor_close_tab(ed);
+
+    size_t old_tab = ed->tabs.active;
+    if (!editor_add_tab(ed, NULL)) return false;
+    tab_list_close(&ed->tabs, old_tab);
     return true;
 }
 
@@ -1306,6 +1328,8 @@ typedef enum {
     MC_OP_NEWLINE,
     MC_OP_BACKSPACE,
     MC_OP_DELETE,
+    MC_OP_DELETE_SELECTION,
+    MC_OP_DELETE_WORD_RIGHT,
     MC_OP_DELETE_WORD_LEFT
 } mc_op_kind_t;
 
@@ -1515,6 +1539,12 @@ static void delete_word_left_single(editor_t *ed)
     }
 }
 
+static void delete_word_right_single(editor_t *ed)
+{
+    if (!ed->sel.active) cursor_word_right_single(ed, true);
+    selection_delete(ed);
+}
+
 static void delete_single(editor_t *ed)
 {
     if (ed->sel.active) {
@@ -1611,7 +1641,15 @@ static void multi_edit_apply(editor_t *ed, mc_op_kind_t op,
             }
         }
 
+        loc_t word_end = orig;
+        if (op == MC_OP_DELETE_WORD_RIGHT && !had_sel) {
+            editor_t probe = *ed;
+            cursor_word_right_single(&probe, false);
+            word_end = (loc_t){probe.cx_line, probe.cx_col};
+        }
         switch (op) {
+        case MC_OP_DELETE_SELECTION: selection_delete(ed); break;
+        case MC_OP_DELETE_WORD_RIGHT: delete_word_right_single(ed); break;
         case MC_OP_CODEPOINT:        insert_codepoint_single(ed, cp); break;
         case MC_OP_TEXT:             insert_text_single(ed, text, len); break;
         case MC_OP_NEWLINE:          insert_newline_single(ed); break;
@@ -1645,6 +1683,11 @@ static void multi_edit_apply(editor_t *ed, mc_op_kind_t op,
             case MC_OP_DELETE_WORD_LEFT:
                 old_start = new_end;
                 old_end = orig;
+                break;
+            case MC_OP_DELETE_SELECTION:
+                break;
+            case MC_OP_DELETE_WORD_RIGHT:
+                old_end = word_end;
                 break;
             case MC_OP_DELETE:
                 old_start = orig;
@@ -1770,6 +1813,28 @@ void editor_delete_word_left(editor_t *ed)
         return;
     }
     delete_word_left_single(ed);
+    touch(ed);
+}
+
+void editor_delete_selections(editor_t *ed)
+{
+    if (!check_writable(ed)) return;
+    if (ed->extra_count > 0) {
+        multi_edit_apply(ed, MC_OP_DELETE_SELECTION, 0, NULL, 0);
+    } else {
+        selection_delete(ed);
+        touch(ed);
+    }
+}
+
+void editor_delete_word_right(editor_t *ed)
+{
+    if (!check_writable(ed) || ed->doc.count == 0) return;
+    if (ed->extra_count > 0) {
+        multi_edit_apply(ed, MC_OP_DELETE_WORD_RIGHT, 0, NULL, 0);
+        return;
+    }
+    delete_word_right_single(ed);
     touch(ed);
 }
 

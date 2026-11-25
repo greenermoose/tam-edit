@@ -6,6 +6,7 @@
 
 typedef void (*action_fn)(editor_t *ed);
 
+const char *actions_name_at(size_t index);
 void actions_init(void);
 void actions_free(void);
 bool actions_execute(editor_t *ed, const char *name);

@@ -72,23 +72,13 @@ static void usage(FILE *out)
         "A small, fast terminal text editor built on libtam.\n"
         "\n"
         "Keybindings:\n"
-        "  Arrows, Home, End, PageUp, PageDown       move cursor\n"
-        "  Shift + Move                              select text\n"
-        "  Ctrl-Left, Ctrl-Right                     move by word\n"
-        "  Enter, Tab, Backspace, Delete             edit\n"
-        "  Ctrl-Z, Ctrl-Y                            undo / redo\n"
-        "  Ctrl-C, Ctrl-X, Ctrl-V                    copy / cut / paste\n"
-        "  Ctrl-A                                    select all\n"
-        "  Ctrl-S                                    save\n"
-        "  Ctrl-Q                                    quit\n"
-        "  Ctrl-F, Ctrl-N, Ctrl-P                    find / next / previous\n"
-        "  Ctrl-E                                    command prompt\n"
-        "  Ctrl-L                                    go to line\n"
-        "  Ctrl-T                                    add tab\n"
-        "  Alt-, / Alt-.                             previous / next tab\n"
-        "  Ctrl-W                                    next split\n"
-        "  Alt-W                                     toggle softwrap\n"
-        "  Ctrl-R                                    toggle line numbers\n"
+        "  Ctrl+E command palette   Ctrl+G keybinding guidance\n"
+        "  Ctrl+N new   Ctrl+O open   Ctrl+S save   Ctrl+D close   Ctrl+Q quit\n"
+        "  Ctrl+F find   Ctrl+R replace   Ctrl+U reload   Ctrl+L redraw\n"
+        "  Ctrl+A select all   Ctrl+K delete line   Ctrl+Z undo   Ctrl+Y redo\n"
+        "  Ctrl+C copy   Ctrl+X cut   Ctrl+V paste\n"
+        "  Ctrl+Left / Ctrl+Right or Alt+, / Alt+. move by word\n"
+        "  Shift+Navigation or Alt+M and movement select text\n"
         "\n"
         "Options:\n"
         "  +LINE[:COL]                 jump to line (and optional column) on open\n"
@@ -389,6 +379,12 @@ int main(int argc, char **argv)
 
     bool need_draw = true;
     bool in_paste  = false;
+    static const char paste_end[] = "\x1b[201~";
+    size_t paste_end_match = 0;
+    const char *term = getenv("TERM");
+    bool ctrl_backspace = term && strcmp(term, "linux") != 0 &&
+                          (strcmp(term, "tam-last") == 0 ||
+                           (tty.saved_termios && tty.saved.c_cc[VERASE] == 0x7F));
     tam_str_t paste_buf = NULL;
     unsigned char buf[512];
 
@@ -429,7 +425,7 @@ int main(int argc, char **argv)
                 editor_reopen(&ed, NULL);
                 need_draw = true;
             } else if (strcmp(ed.config.reload, "prompt") == 0) {
-                prompt_open_confirm_reload(&ed, ed.path);
+                prompt_open_confirm_reload(&ed, ed.path, false);
                 need_draw = true;
             }
         }
@@ -523,42 +519,61 @@ int main(int argc, char **argv)
         size_t b_idx = 0;
 
         while (b_idx < b_len) {
-            /* Bracketed paste check */
-            if (!in_paste && b_len - b_idx >= 6 &&
-                memcmp(buf + b_idx, "\x1b[200~", 6) == 0) {
+            unsigned char byte = buf[b_idx];
+            if (!in_paste && byte == '~' && tam_key_pending(&keys) == 5 &&
+                memcmp(keys.buf, "\x1b[200", 5) == 0) {
+                tam_key_init(&keys);
                 in_paste = true;
-                b_idx += 6;
+                paste_end_match = 0;
                 paste_buf = tam_str_new("");
+                b_idx++;
                 continue;
             }
 
             if (in_paste) {
-                const char *end_paste = memmem(buf + b_idx, b_len - b_idx,
-                                               "\x1b[201~", 6);
-                if (end_paste != NULL) {
-                    size_t chunk_len = (const unsigned char *)end_paste - (buf + b_idx);
-                    if (chunk_len > 0) {
-                        paste_buf = tam_str_cat_len(paste_buf, buf + b_idx, chunk_len);
-                    }
-                    if (paste_buf != NULL) {
-                        editor_insert_text(&ed, paste_buf, tam_str_len(paste_buf));
+                b_idx++;
+                if (byte == (unsigned char)paste_end[paste_end_match]) {
+                    if (++paste_end_match == sizeof(paste_end) - 1) {
+                        if (paste_buf) {
+                            if (ed.prompt.active)
+                                prompt_paste_text(&ed, paste_buf, tam_str_len(paste_buf));
+                            else {
+                                editor_insert_text(&ed, paste_buf, tam_str_len(paste_buf));
+                                ed.mark = false;
+                            }
+                        }
                         tam_str_free(paste_buf);
                         paste_buf = NULL;
+                        in_paste = false;
+                        need_draw = true;
                     }
-                    in_paste = false;
-                    b_idx = ((const unsigned char *)end_paste - buf) + 6;
-                    need_draw = true;
-                    continue;
                 } else {
-                    paste_buf = tam_str_cat_len(paste_buf, buf + b_idx, b_len - b_idx);
-                    b_idx = b_len;
-                    continue;
+                    tam_str_t next = tam_str_cat_len(paste_buf, paste_end, paste_end_match);
+                    if (!next) tam_str_free(paste_buf);
+                    paste_buf = next;
+                    paste_end_match = byte == (unsigned char)paste_end[0] ? 1 : 0;
+                    if (!paste_end_match) {
+                        next = tam_str_cat_len(paste_buf, &byte, 1);
+                        if (!next) tam_str_free(paste_buf);
+                        paste_buf = next;
+                    }
                 }
+                continue;
+            }
+
+            if (ctrl_backspace && byte == 0x08 && tam_key_pending(&keys) == 0) {
+                tam_key_event_t ev = {TAM_KEY_BACKSPACE, 0, TAM_MOD_CTRL};
+                if (ed.prompt.active) prompt_handle_key(&ed, &ev);
+                else actions_handle_key(&ed, &ev, render_text_rows(&tty));
+                b_idx++;
+                need_draw = true;
+                continue;
             }
 
             /* SGR Mouse check */
             size_t consumed = 0;
             if (handle_mouse_sgr(&ed, buf + b_idx, b_len - b_idx, &consumed, tty.rows)) {
+                ed.mark = false;
                 b_idx += consumed;
                 need_draw = true;
                 continue;
