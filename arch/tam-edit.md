@@ -1,6 +1,6 @@
 # `tam-edit` Architecture: Data Structures & Algorithms
 
-This document describes the data structures, ownership model, and core algorithms implemented in our C11 version of `tam-edit` (`src/`).
+This document describes the data structures, ownership model, and core algorithms implemented in our C17 version of `tam-edit` (`src/`).
 
 ---
 

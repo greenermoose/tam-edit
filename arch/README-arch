@@ -30,8 +30,8 @@ KEEPING IT TRUE
 IN THIS REPOSITORY
 
   Documents the internal data structures, memory ownership models, and
-  core algorithms used in the C11 implementation of tam-edit, plus
-  trade-offs under the Tamlinux philosophy (pure C11, minimal
+  core algorithms used in the C17 implementation of tam-edit, plus
+  trade-offs under the Tamlinux philosophy (pure C17, minimal
   dependencies, libtam-only linkage, and first-class Linux VT support).
 
   tam-edit.md   data structures and algorithms implemented in src/

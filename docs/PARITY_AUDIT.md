@@ -1,10 +1,10 @@
 # tam-edit v1.0.0 Parity Audit
 
-Audit of the C11 editor (`src/`) against the Go `micro` reference (`internal/`, `cmd/tam-edit/`) prior to pruning the Go tree on `c11`.
+Audit of the C17 editor (`src/`) against the Go `micro` reference (`internal/`, `cmd/tam-edit/`) prior to pruning the Go tree on `c11`.
 
 ## 1. Commands (`internal/action/command.go` vs `src/prompt.c`)
 
-| Command | Go Reference | C11 Status | Notes / Intentional v1 Difference |
+| Command | Go Reference | C17 Status | Notes / Intentional v1 Difference |
 | --- | --- | --- | --- |
 | `set`, `setlocal` | Yes | Implemented | `src/prompt.c`, persisted via `tam_ini` (`settings.ini`) |
 | `toggle`, `togglelocal` | Yes | Implemented | `src/prompt.c` |
@@ -27,22 +27,22 @@ Audit of the C11 editor (`src/`) against the Go `micro` reference (`internal/`, 
 | `retab` | Yes | Implemented | `src/prompt.c`, `src/editor.c` |
 | `reload` | Yes | Omitted (v1) | Use `reopen` for current buffer; `reload` setting (`prompt`/`auto`/`disabled`) is implemented |
 | `raw` | Yes | Omitted (v1) | Replaced by `showkey` and `--dump-syntax` |
-| `memusage` | Yes | Omitted (v1) | Go runtime memory stats; not applicable to C11 |
+| `memusage` | Yes | Omitted (v1) | Go runtime memory stats; not applicable to C17 |
 | `eval`, `log` | Yes | Omitted (v1) | Deferred with Lua plugin runtime (Phase 8) |
 | `plugin` | Yes | Omitted (v1) | Non-goal for v1 (Phase 8) |
 | `term` | Yes | Omitted (v1) | Non-goal for v1 (Phase 8) |
 
 ## 2. Settings & Options (`internal/config/settings.go` vs `src/config.c`)
 
-### Implemented in C11
-`autoindent`, `clipboard` (`internal`/`external`/`terminal`), `colorscheme`, `cursorline`, `detectlimit`, `encoding`, `eofnewline`, `fileformat` (`unix`/`dos` via `setlocal`/`togglelocal`/`show`), `filetype` (via `set`/`setlocal`/`togglelocal`/`show`), `hlsearch`, `ignorecase`, `incsearch`, `mkparents`, `overwrite` (via `Insert` / `ToggleOverwriteMode`), `readonly` (via `setlocal`/`togglelocal`/`show`), `reload` (`prompt`/`auto`/`disabled`), `rmtrailingws`, `ruler`, `scrollmargin`, `scrollsync` (C11 addition for split sync), `smartpaste`, `softwrap`, `splitbottom`, `splitright`, `statusline`, `syntax`, `tabbar` (`auto`/`on`/`off`), `tabmovement`, `tabsize`, `tabstospaces`, `truecolor` (`auto`/`on`/`off`), `wordwrap`, `helpsplit` (`hsplit`/`vsplit`).
+### Implemented in C17
+`autoindent`, `clipboard` (`internal`/`external`/`terminal`), `colorscheme`, `cursorline`, `detectlimit`, `encoding`, `eofnewline`, `fileformat` (`unix`/`dos` via `setlocal`/`togglelocal`/`show`), `filetype` (via `set`/`setlocal`/`togglelocal`/`show`), `hlsearch`, `ignorecase`, `incsearch`, `mkparents`, `overwrite` (via `Insert` / `ToggleOverwriteMode`), `readonly` (via `setlocal`/`togglelocal`/`show`), `reload` (`prompt`/`auto`/`disabled`), `rmtrailingws`, `ruler`, `scrollmargin`, `scrollsync` (C17 addition for split sync), `smartpaste`, `softwrap`, `splitbottom`, `splitright`, `statusline`, `syntax`, `tabbar` (`auto`/`on`/`off`), `tabmovement`, `tabsize`, `tabstospaces`, `truecolor` (`auto`/`on`/`off`), `wordwrap`, `helpsplit` (`hsplit`/`vsplit`).
 
 ### Intentional v1 Omissions (documented)
 - `autosave`, `backup`, `backupdir`, `permbackup`, `savecursor`, `saveundo`: background timers / persistent state files deferred past v1 (atomic writes via `tam_fs_write_atomic` are always used).
 - `autosu`: privilege escalation on save omitted for v1 security simplicity.
 - `basename`, `statusformatl`, `statusformatr`, `divchars`, `divreverse`, `scrollbar`: fixed clean statusline/divider layout in `src/render.c`.
 - `colorcolumn`, `diffgutter`, `hltaberrors`, `hltrailingws`, `matchbrace`, `matchbraceleft`, `matchbracestyle`, `relativeruler`, `showchars`: visual decorations deferred past v1.
-- `fastdirty`, `indentchar` (deprecated in micro), `keepautoindent`, `multiopen`, `pageoverlap`, `scrollspeed`, `useprimary`: simplified or fixed defaults in C11.
+- `fastdirty`, `indentchar` (deprecated in micro), `keepautoindent`, `multiopen`, `pageoverlap`, `scrollspeed`, `useprimary`: simplified or fixed defaults in C17.
 - `sucmd`, `pluginchannels`, `pluginrepos`, `infobar`, `keymenu`: plugin/sudo/keymenu UI deferred.
 
 ## 3. Default Keybindings (`internal/action/defaults_other.go` vs `src/actions.c`)
@@ -57,7 +57,7 @@ Audit of the C11 editor (`src/`) against the Go `micro` reference (`internal/`, 
 
 ## 4. CLI Flags (`cmd/tam-edit/main.go` vs `src/main.c`)
 
-| Flag | Go Reference | C11 Status | Notes |
+| Flag | Go Reference | C17 Status | Notes |
 | --- | --- | --- | --- |
 | `-v`, `--version` | `-version` | Implemented | Prints `tam-edit <ver> (libtam <ver>)` |
 | `-h`, `--help` | `-help` | Implemented | Prints CLI usage |

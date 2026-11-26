@@ -52,7 +52,7 @@ HOW DEEP THESE NOTES GO
 IN THIS REPOSITORY
 
   Notes on design, ergonomics and architectural ideas from upstream and
-  peer editors evaluated against the Tamlinux philosophy (pure C11,
+  peer editors evaluated against the Tamlinux philosophy (pure C17,
   minimal dependencies, libtam-only linkage, and first-class Linux VT
   support):
 
