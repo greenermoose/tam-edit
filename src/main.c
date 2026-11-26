@@ -8,6 +8,7 @@
 #include "syntax.h"
 
 #include <tam.h>
+#include <tam_uni.h>
 #include <tam_key.h>
 #include <tam_tty.h>
 
@@ -24,15 +25,8 @@
 #define TAM_EDIT_VERSION "0.4.0"
 #endif
 
-static volatile sig_atomic_t g_resized;
 static volatile sig_atomic_t g_stop;
 static volatile sig_atomic_t g_suspend;
-
-static void on_winch(int sig)
-{
-    (void)sig;
-    g_resized = 1;
-}
 
 static void on_stop(int sig)
 {
@@ -51,9 +45,6 @@ static void install_signals(void)
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sigemptyset(&sa.sa_mask);
-
-    sa.sa_handler = on_winch;
-    sigaction(SIGWINCH, &sa, NULL);
 
     sa.sa_handler = on_stop;
     sigaction(SIGINT, &sa, NULL);
@@ -91,7 +82,7 @@ static void usage(FILE *out)
 
 static int dump_syntax_file(const char *path)
 {
-    setlocale(LC_CTYPE, "");
+    tam_locale_init();
     buffer_t *b = buffer_open(path);
     if (b == NULL) {
         fprintf(stderr, "tam-edit: cannot open '%s'\n", path);
@@ -130,26 +121,19 @@ static int dump_syntax_file(const char *path)
     return 0;
 }
 
-/* Parse SGR mouse escape sequences: \x1b[<btn;col;row[M|m] */
-static bool handle_mouse_sgr(editor_t *ed, const unsigned char *buf, size_t len,
-                             size_t *consumed, int tty_rows)
+/* Handle a mouse event decoded by tam_key. btn is the SGR button code the
+ * click logic below was written for (0 left, 16 Ctrl+left, 32 drag, 64/65
+ * wheel); x and y count from 1. */
+static bool handle_mouse_event(editor_t *ed, const tam_key_event_t *mev)
 {
-    (void)tty_rows;
-    if (len < 6 || buf[0] != '\x1b' || buf[1] != '[' || buf[2] != '<') {
-        return false;
-    }
-
-    size_t end = 3;
-    while (end < len && buf[end] != 'M' && buf[end] != 'm') end++;
-    if (end >= len) return false;
-
-    char end_char = (char)buf[end];
-    *consumed = end + 1;
-
-    int btn = 0, x = 0, y = 0;
-    if (sscanf((const char *)buf + 3, "%d;%d;%d", &btn, &x, &y) != 3) {
-        return true;
-    }
+    int btn = mev->button;
+    if (btn >= TAM_MOUSE_WHEEL_UP) btn = 64 + (btn - TAM_MOUSE_WHEEL_UP);
+    if (mev->mods & TAM_MOD_SHIFT) btn |= 4;
+    if (mev->mods & TAM_MOD_ALT) btn |= 8;
+    if (mev->mods & TAM_MOD_CTRL) btn |= 16;
+    if (mev->motion) btn |= 32;
+    int x = mev->col, y = mev->row;
+    char end_char = mev->release ? 'm' : 'M';
 
     /* Check click on Tab Bar (row 1 in 1-based coordinates) */
     bool show_tabbar = (ed->config.tabbar == TABBAR_ON) ||
@@ -319,7 +303,7 @@ int main(int argc, char **argv)
         }
     }
 
-    setlocale(LC_CTYPE, "");
+    tam_locale_init();
 
     editor_t ed;
     editor_init(&ed);
@@ -365,6 +349,10 @@ int main(int argc, char **argv)
     ed.tty_out_fd = tty.out_fd;
 
     install_signals();
+    /* Restore the terminal on a crash, a signal we do not handle, or an exit
+     * that skips tam_tty_close. */
+    tam_tty_install_restore(&tty);
+    int winch_fd = tam_tty_watch_resize(&tty);
 
     tam_tty_alt_screen(&tty, true);
     tam_tty_raw(&tty, true);
@@ -379,8 +367,6 @@ int main(int argc, char **argv)
 
     bool need_draw = true;
     bool in_paste  = false;
-    static const char paste_end[] = "\x1b[201~";
-    size_t paste_end_match = 0;
     const char *term = getenv("TERM");
     bool ctrl_backspace = term && strcmp(term, "linux") != 0 &&
                           (strcmp(term, "tam-last") == 0 ||
@@ -390,30 +376,11 @@ int main(int argc, char **argv)
 
     while (ed.running && !g_stop) {
         if (g_suspend) {
+            /* SIGTSTP from outside (raw mode turns Ctrl+Z into a key):
+             * leave the terminal as the shell expects, stop, and come back
+             * with exactly the modes we had. */
             g_suspend = 0;
-            tam_tty_mouse(&tty, false);
-            tam_tty_paste(&tty, false);
-            tam_tty_alt_screen(&tty, false);
-            tam_tty_raw(&tty, false);
-            tam_tty_cursor_visible(&tty, true);
-
-            signal(SIGTSTP, SIG_DFL);
-            raise(SIGTSTP);
-
-            /* Resume */
-            install_signals();
-            tam_tty_alt_screen(&tty, true);
-            tam_tty_raw(&tty, true);
-            tam_tty_paste(&tty, true);
-            tam_tty_mouse(&tty, true);
-            ren.force_redraw = true;
-            need_draw = true;
-        }
-
-        if (g_resized) {
-            g_resized = 0;
-            tam_tty_size(&tty, &tty.rows, &tty.cols);
-            editor_layout(&ed, tty.rows, tty.cols);
+            tam_tty_job_stop(&tty);
             ren.force_redraw = true;
             need_draw = true;
         }
@@ -448,16 +415,19 @@ int main(int argc, char **argv)
             if (timeout_ms < 0 || timeout_ms > 50) timeout_ms = 50;
         }
 
-        struct pollfd fds[2];
-        nfds_t nfds = 1;
+        struct pollfd fds[3];
+        nfds_t nfds = 2;
         fds[0].fd = STDIN_FILENO;
         fds[0].events = POLLIN;
         fds[0].revents = 0;
+        fds[1].fd = winch_fd;
+        fds[1].events = POLLIN;
+        fds[1].revents = 0;
         if (ed.bg_job.active && ed.bg_job.pipe_fd >= 0) {
-            fds[1].fd = ed.bg_job.pipe_fd;
-            fds[1].events = POLLIN;
-            fds[1].revents = 0;
-            nfds = 2;
+            fds[2].fd = ed.bg_job.pipe_fd;
+            fds[2].events = POLLIN;
+            fds[2].revents = 0;
+            nfds = 3;
         }
 
         int prc = poll(fds, nfds, timeout_ms);
@@ -481,7 +451,13 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if (nfds == 2 && (fds[1].revents & (POLLIN | POLLHUP | POLLERR))) {
+        if (fds[1].revents != 0 && tam_tty_resized(&tty)) {
+            editor_layout(&ed, tty.rows, tty.cols);
+            ren.force_redraw = true;
+            need_draw = true;
+        }
+
+        if (nfds == 3 && (fds[2].revents & (POLLIN | POLLHUP | POLLERR))) {
             if (!shell_bg_poll_read(&ed.bg_job)) {
                 if (ed.bg_job.timed_out) {
                     editor_set_message(&ed, "Command timed out: %s", ed.bg_job.cmd_desc);
@@ -509,31 +485,68 @@ int main(int argc, char **argv)
         }
 
         if (!(fds[0].revents & POLLIN)) {
+            /* The terminal hung up or the descriptor is gone: stop, instead
+             * of polling the dead descriptor forever. */
+            if (fds[0].revents & (POLLHUP | POLLERR | POLLNVAL)) break;
             continue;
         }
 
         ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
-        if (n <= 0) continue;
+        if (n == 0) break;
+        if (n < 0) {
+            if (errno == EINTR || errno == EAGAIN) continue;
+            break;
+        }
 
         size_t b_len = (size_t)n;
         size_t b_idx = 0;
 
-        while (b_idx < b_len) {
-            unsigned char byte = buf[b_idx];
-            if (!in_paste && byte == '~' && tam_key_pending(&keys) == 5 &&
-                memcmp(keys.buf, "\x1b[200", 5) == 0) {
-                tam_key_init(&keys);
-                in_paste = true;
-                paste_end_match = 0;
-                paste_buf = tam_str_new("");
+        while (b_idx < b_len && ed.running && !g_stop) {
+            /* Ctrl+Backspace arrives as a bare 0x08 on terminals that send
+             * 0x7F for Backspace; tam_key reports both as Backspace. */
+            if (ctrl_backspace && !in_paste && buf[b_idx] == 0x08 &&
+                tam_key_pending(&keys) == 0) {
+                tam_key_event_t ev = {.type = TAM_KEY_BACKSPACE, .mods = TAM_MOD_CTRL};
+                if (ed.prompt.active) prompt_handle_key(&ed, &ev);
+                else actions_handle_key(&ed, &ev, render_text_rows(&tty));
                 b_idx++;
+                need_draw = true;
                 continue;
             }
+            size_t end = b_idx + 1;
+            if (ctrl_backspace) {
+                while (end < b_len && buf[end] != 0x08) end++;
+            } else {
+                end = b_len;
+            }
 
-            if (in_paste) {
-                b_idx++;
-                if (byte == (unsigned char)paste_end[paste_end_match]) {
-                    if (++paste_end_match == sizeof(paste_end) - 1) {
+            /* The parser takes what fits; take its events, then feed the
+             * rest. */
+            while (b_idx < end) {
+                int took = tam_key_feed(&keys, buf + b_idx, end - b_idx);
+                if (took < 0) {
+                    b_idx = end;
+                    break;
+                }
+                b_idx += (size_t)took;
+
+                tam_key_event_t ev;
+                while (tam_key_next(&keys, &ev) == 1) {
+                    switch (ev.type) {
+                    case TAM_KEY_PASTE_BEGIN:
+                        in_paste = true;
+                        tam_str_free(paste_buf);
+                        paste_buf = tam_str_new("");
+                        break;
+                    case TAM_KEY_PASTE:
+                        if (paste_buf) {
+                            tam_str_t next = tam_str_cat_len(paste_buf, ev.text, ev.len);
+                            if (!next) tam_str_free(paste_buf);
+                            paste_buf = next;
+                        }
+                        break;
+                    case TAM_KEY_PASTE_END:
+                        in_paste = false;
                         if (paste_buf) {
                             if (ed.prompt.active)
                                 prompt_paste_text(&ed, paste_buf, tam_str_len(paste_buf));
@@ -544,54 +557,25 @@ int main(int argc, char **argv)
                         }
                         tam_str_free(paste_buf);
                         paste_buf = NULL;
-                        in_paste = false;
                         need_draw = true;
+                        break;
+                    case TAM_KEY_MOUSE:
+                        if (handle_mouse_event(&ed, &ev)) {
+                            ed.mark = false;
+                            need_draw = true;
+                        }
+                        break;
+                    default:
+                        if (ed.prompt.active) {
+                            prompt_handle_key(&ed, &ev);
+                        } else {
+                            actions_handle_key(&ed, &ev, render_text_rows(&tty));
+                        }
+                        need_draw = true;
+                        break;
                     }
-                } else {
-                    tam_str_t next = tam_str_cat_len(paste_buf, paste_end, paste_end_match);
-                    if (!next) tam_str_free(paste_buf);
-                    paste_buf = next;
-                    paste_end_match = byte == (unsigned char)paste_end[0] ? 1 : 0;
-                    if (!paste_end_match) {
-                        next = tam_str_cat_len(paste_buf, &byte, 1);
-                        if (!next) tam_str_free(paste_buf);
-                        paste_buf = next;
-                    }
+                    if (!ed.running || g_stop) break;
                 }
-                continue;
-            }
-
-            if (ctrl_backspace && byte == 0x08 && tam_key_pending(&keys) == 0) {
-                tam_key_event_t ev = {.type = TAM_KEY_BACKSPACE, .mods = TAM_MOD_CTRL};
-                if (ed.prompt.active) prompt_handle_key(&ed, &ev);
-                else actions_handle_key(&ed, &ev, render_text_rows(&tty));
-                b_idx++;
-                need_draw = true;
-                continue;
-            }
-
-            /* SGR Mouse check */
-            size_t consumed = 0;
-            if (handle_mouse_sgr(&ed, buf + b_idx, b_len - b_idx, &consumed, tty.rows)) {
-                ed.mark = false;
-                b_idx += consumed;
-                need_draw = true;
-                continue;
-            }
-
-            /* Feed byte into key decoder */
-            tam_key_feed(&keys, buf + b_idx, 1);
-            b_idx++;
-
-            tam_key_event_t ev;
-            while (tam_key_next(&keys, &ev) == 1) {
-                if (ed.prompt.active) {
-                    prompt_handle_key(&ed, &ev);
-                } else {
-                    actions_handle_key(&ed, &ev, render_text_rows(&tty));
-                }
-                need_draw = true;
-                if (!ed.running || g_stop) break;
             }
         }
     }

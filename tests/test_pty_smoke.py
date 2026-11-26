@@ -512,6 +512,30 @@ def test_pty_standard_keys():
     print("[PASS] Standard shortcuts, OSC 52, console clipboard and split paste framing")
 
 
+def test_pty_hangup_exits():
+    """When the terminal goes away, tam-edit exits instead of spinning on
+    the dead descriptor (it busy-looped before 1.2.0)."""
+    with tempfile.TemporaryDirectory(prefix="tam-hup-cfg-") as cfg_dir:
+        env = os.environ.copy()
+        env["TAM_EDIT_CONFIG_HOME"] = cfg_dir
+        master, slave = pty.openpty()
+        proc = subprocess.Popen(
+            ["./build/tam-edit"],
+            stdin=slave, stdout=slave, stderr=slave, env=env, close_fds=True,
+        )
+        os.close(slave)
+        time.sleep(0.4)
+        _read_pty_until_idle(master)
+        os.close(master)  # hang up
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            raise AssertionError("tam-edit kept running after its terminal hung up")
+    print("[PASS] PTY hang-up ends tam-edit")
+
+
 if __name__ == "__main__":
     test_cli_version()
     test_cli_config_check()
@@ -523,3 +547,4 @@ if __name__ == "__main__":
     test_pty_arrow_keys()
     test_pty_delete_word_left()
     test_pty_standard_keys()
+    test_pty_hangup_exits()

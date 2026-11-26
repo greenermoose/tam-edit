@@ -285,7 +285,7 @@ bool shell_bg_start(shell_bg_t *bg, const char *cmd, int timeout_ms,
                       split_argc > 0;
 
     int pipefd[2];
-    if (pipe(pipefd) != 0) {
+    if (pipe2(pipefd, O_CLOEXEC) != 0) {
         shell_split_free(split_argv, split_argc);
         if (err_buf && err_size > 0) snprintf(err_buf, err_size, "pipe failed: %s", strerror(errno));
         return false;
@@ -451,52 +451,29 @@ void shell_bg_free(shell_bg_t *bg) {
 
 int shell_run_interactive(tam_tty_t *tty, const char *cmd,
                           bool wait_for_enter, bool mouse_enabled) {
-    if (tty) {
-        tam_tty_mouse(tty, false);
-        tam_tty_paste(tty, false);
-        tam_tty_raw(tty, false);
-        tam_tty_alt_screen(tty, false);
-        tam_tty_cursor_visible(tty, true);
-    }
+    (void)mouse_enabled; /* resume brings back exactly what was on */
+    if (tty) tam_tty_suspend(tty);
 
+    /* tam_run_foreground ignores Ctrl+C and Ctrl+\ in tam-edit while the
+     * program runs, so they reach only the program. */
     int exit_code = 0;
-    pid_t pid = fork();
-    if (pid == 0) {
-        if (cmd && cmd[0]) {
-            const char *argv[4] = { "sh", "-c", cmd, NULL };
-            execvp("sh", (char *const *)(uintptr_t)argv);
-        } else {
-            const char *sh = getenv("SHELL");
-            if (!sh || !sh[0]) sh = "sh";
-            const char *argv[2] = { sh, NULL };
-            execvp(sh, (char *const *)(uintptr_t)argv);
-        }
-        _exit(127);
-    } else if (pid > 0) {
-        int status = 0;
-        while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
-        if (WIFEXITED(status)) exit_code = WEXITSTATUS(status);
-        else if (WIFSIGNALED(status)) exit_code = 128 + WTERMSIG(status);
-    } else {
-        exit_code = -1;
-    }
+    const char *sh = getenv("SHELL");
+    if (!sh || !sh[0]) sh = "sh";
+    const char *with_cmd[4] = { "sh", "-c", cmd, NULL };
+    const char *bare[2] = { sh, NULL };
+    const char *const *argv = (cmd && cmd[0]) ? with_cmd : bare;
+    if (tam_run_foreground(argv, &exit_code) < 0)
+        exit_code = errno == ENOENT ? 127 : -1;
 
     if (wait_for_enter) {
         const char *msg = "\nPress enter to continue\n";
-        ssize_t unused = write(STDOUT_FILENO, msg, strlen(msg));
-        (void)unused;
+        (void)tam_write_all(STDOUT_FILENO, msg, strlen(msg));
         char c = 0;
         while (read(STDIN_FILENO, &c, 1) > 0) {
             if (c == '\n' || c == '\r') break;
         }
     }
 
-    if (tty) {
-        tam_tty_alt_screen(tty, true);
-        tam_tty_raw(tty, true);
-        tam_tty_paste(tty, true);
-        if (mouse_enabled) tam_tty_mouse(tty, true);
-        tam_tty_cursor_visible(tty, true);
-    }
+    if (tty) tam_tty_resume(tty);
     return exit_code;
 }

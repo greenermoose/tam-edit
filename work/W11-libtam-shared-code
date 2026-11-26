@@ -1,0 +1,47 @@
+W11 ONTO LIBTAM'S SHARED CODE (TAM-EDIT 1.2.0)
+
+Date: 2026-11-26
+AI harness: Claude Code 2.1.332
+AI model: claude-opus-5-5
+Continues: W10
+
+
+GUIDANCE
+
+  Fred: "Move each program onto the shared code."
+
+
+DONE
+
+  - Input: whole reads go to tam_key in a feed loop; paste arrives as
+    TAM_KEY_PASTE events (no more peeking at the parser's buffer or
+    feeding one byte at a time) and mouse reports as TAM_KEY_MOUSE, fed
+    to the existing click logic. Ctrl+Backspace (a bare 0x08) is still
+    split out.
+  - Terminal: tam_tty_job_stop for an outside SIGTSTP, the resize pipe
+    in the poll set instead of a SIGWINCH flag, tam_tty_install_restore
+    for crashes and exits that skip close, tam_locale_init.
+  - Hang-up: tam-edit exits when the terminal goes away or read returns
+    0, instead of spinning (test_pty_hangup_exits).
+  - The interactive shell runs through tam_tty_suspend,
+    tam_run_foreground and tam_tty_resume, so Ctrl+C there no longer
+    reaches tam-edit.
+  - OSC 52 uses tam_b64 and tam_write_all (no more single unlooped
+    write); BEL terminator kept. tam_utf8_valid, tam_monotonic_ms,
+    pipe2(O_CLOEXEC) for background jobs.
+  - Key names go through tam_key_name_parse/format behind a wrapper that
+    keeps tam-edit's spellings: run-together micro names and a lone
+    letter meaning the lowercase key.
+  - No install guard: tam-edit is a recovery tool.
+  - Floor libtam 0.12.0. make test, test-asan and test-pty pass.
+
+
+FAILED
+
+  - Nothing.
+
+
+HANDOFF
+
+  - Left local: the regex engine's UTF-8 stepping (fuzzed hot path) and
+    the config directory lookups.

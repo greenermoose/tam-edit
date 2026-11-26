@@ -406,97 +406,50 @@ bool keybind_parse_string(const char *str, tam_key_type_t *type_out,
     const char *p = trim_inplace(key_buf);
     if (*p == '\0') return false;
 
-    unsigned mods = 0;
-
-    /* Parse modifier prefixes: "Ctrl-", "Alt-", "Shift-" or combined "CtrlShift" */
-    while (*p) {
-        if (strncasecmp(p, "ctrl", 4) == 0 && (p[4] == '-' || p[4] == '+')) {
-            mods |= TAM_MOD_CTRL;
-            p += 5;
-        } else if (strncasecmp(p, "alt", 3) == 0 && (p[3] == '-' || p[3] == '+')) {
-            mods |= TAM_MOD_ALT;
-            p += 4;
-        } else if (strncasecmp(p, "shift", 5) == 0 && (p[5] == '-' || p[5] == '+')) {
-            mods |= TAM_MOD_SHIFT;
-            p += 6;
-        } else if (strncasecmp(p, "ctrl", 4) == 0 && isupper((unsigned char)p[4])) {
-            mods |= TAM_MOD_CTRL;
-            p += 4;
-        } else if (strncasecmp(p, "alt", 3) == 0 && isupper((unsigned char)p[3])) {
-            mods |= TAM_MOD_ALT;
-            p += 3;
-        } else if (strncasecmp(p, "shift", 5) == 0 && isupper((unsigned char)p[5])) {
-            mods |= TAM_MOD_SHIFT;
-            p += 5;
-        } else {
+    /* tam-edit's own spellings, put into the form tam_key_name_parse
+     * reads: run-together modifiers as micro writes them ("CtrlPageUp",
+     * "AltShiftLeft") get a '+', and a lone letter means the lowercase key,
+     * as it always has here. */
+    char name[160];
+    size_t n = 0;
+    bool any_mod = false;
+    for (;;) {
+        static const struct { const char *word; size_t len; } mods[] = {
+            {"ctrl", 4}, {"alt", 3}, {"shift", 5},
+        };
+        bool matched = false;
+        for (size_t m = 0; m < sizeof(mods) / sizeof(mods[0]); m++) {
+            size_t len = mods[m].len;
+            if (strncasecmp(p, mods[m].word, len) != 0) continue;
+            char next = p[len];
+            if ((next == '-' || next == '+') && p[len + 1] != '\0') {
+                memcpy(name + n, p, len + 1);
+                n += len + 1;
+                p += len + 1;
+            } else if (isupper((unsigned char)next)) {
+                memcpy(name + n, p, len);
+                n += len;
+                name[n++] = '+';
+                p += len;
+            } else {
+                continue;
+            }
+            matched = any_mod = true;
             break;
         }
+        if (!matched || n > sizeof(name) - 40) break;
     }
+    size_t rest = strlen(p);
+    if (n + rest + 1 > sizeof(name)) return false;
+    memcpy(name + n, p, rest + 1);
+    if (!any_mod && rest == 1 && isalpha((unsigned char)p[0]))
+        name[n] = (char)tolower((unsigned char)p[0]);
 
-    tam_key_type_t type = TAM_KEY_CHAR;
-    uint32_t cp = 0;
-
-    if (strcasecmp(p, "up") == 0) {
-        type = TAM_KEY_UP;
-    } else if (strcasecmp(p, "down") == 0) {
-        type = TAM_KEY_DOWN;
-    } else if (strcasecmp(p, "left") == 0) {
-        type = TAM_KEY_LEFT;
-    } else if (strcasecmp(p, "right") == 0) {
-        type = TAM_KEY_RIGHT;
-    } else if (strcasecmp(p, "home") == 0) {
-        type = TAM_KEY_HOME;
-    } else if (strcasecmp(p, "end") == 0) {
-        type = TAM_KEY_END;
-    } else if (strcasecmp(p, "pageup") == 0 || strcasecmp(p, "pgup") == 0) {
-        type = TAM_KEY_PAGE_UP;
-    } else if (strcasecmp(p, "pagedown") == 0 || strcasecmp(p, "pgdn") == 0) {
-        type = TAM_KEY_PAGE_DOWN;
-    } else if (strcasecmp(p, "enter") == 0 || strcasecmp(p, "return") == 0) {
-        type = TAM_KEY_ENTER;
-    } else if (strcasecmp(p, "tab") == 0) {
-        type = TAM_KEY_TAB;
-    } else if (strcasecmp(p, "backtab") == 0) {
-        type = TAM_KEY_TAB;
-        mods |= TAM_MOD_SHIFT;
-    } else if (strcasecmp(p, "backspace") == 0) {
-        type = TAM_KEY_BACKSPACE;
-    } else if (strcasecmp(p, "insert") == 0 || strcasecmp(p, "ins") == 0) {
-        type = TAM_KEY_INSERT;
-    } else if (strcasecmp(p, "delete") == 0 || strcasecmp(p, "del") == 0) {
-        type = TAM_KEY_DELETE;
-    } else if (strcasecmp(p, "escape") == 0 || strcasecmp(p, "esc") == 0) {
-        type = TAM_KEY_ESC;
-    } else if (strcasecmp(p, "space") == 0) {
-        type = TAM_KEY_CHAR;
-        cp = ' ';
-    } else if ((p[0] == 'f' || p[0] == 'F') && isdigit((unsigned char)p[1])) {
-        char *end;
-        long fnum = strtol(p + 1, &end, 10);
-        if (!*end && fnum >= 1 && fnum <= 12) {
-            type = (tam_key_type_t)(TAM_KEY_F1 + (fnum - 1));
-        } else {
-            return false;
-        }
-    } else if (strlen(p) == 1) {
-        type = TAM_KEY_CHAR;
-        cp = (unsigned char)tolower((unsigned char)p[0]);
-        if (mods & TAM_MOD_SHIFT && !(mods & TAM_MOD_CTRL)) {
-            const char *plain = "`1234567890-=[]\\;',./";
-            const char *shifted = "~!@#$%^&*()_+{}|:\"<>?";
-            const char *key = strchr(plain, (int)cp);
-            cp = key ? (unsigned char)shifted[key - plain] : (unsigned char)toupper((int)cp);
-            mods &= ~TAM_MOD_SHIFT;
-        }
-        if ((mods & TAM_MOD_CTRL) && cp == '\\') cp = '|';
-    } else {
-        /* Other key names like MouseLeft, etc. can be accepted */
-        return false;
-    }
-
-    *type_out = type;
-    *cp_out   = cp;
-    *mods_out = mods;
+    tam_key_event_t ev;
+    if (!tam_key_name_parse(name, &ev)) return false;
+    *type_out = ev.type;
+    *cp_out   = ev.codepoint;
+    *mods_out = ev.mods;
     return true;
 }
 
@@ -504,56 +457,8 @@ void keybind_format_string(tam_key_type_t type, uint32_t cp, unsigned mods,
                            char *buf, size_t buflen)
 {
     if (!buf || buflen == 0) return;
-    if (type == TAM_KEY_CHAR && (mods & TAM_MOD_ALT) && cp >= 'A' && cp <= 'Z')
-        mods |= TAM_MOD_SHIFT;
-    if (type == TAM_KEY_CHAR && mods == 0 && cp >= 'A' && cp <= 'Z')
-        mods |= TAM_MOD_SHIFT;
-    if (type == TAM_KEY_CHAR && (mods & TAM_MOD_CTRL) && cp == '|') cp = '\\';
-    if (type == TAM_KEY_CHAR && mods && cp >= 'a' && cp <= 'z')
-        cp = (uint32_t)toupper((int)cp);
-    char prefix[64] = "";
-    if (mods & TAM_MOD_CTRL)  strncat(prefix, "Ctrl+",  sizeof(prefix) - strlen(prefix) - 1);
-    if (mods & TAM_MOD_ALT)   strncat(prefix, "Alt+",   sizeof(prefix) - strlen(prefix) - 1);
-    if (mods & TAM_MOD_SHIFT) strncat(prefix, "Shift+", sizeof(prefix) - strlen(prefix) - 1);
-
-    const char *kname = NULL;
-    char ch_name[16] = "";
-    switch (type) {
-    case TAM_KEY_UP:        kname = "Up"; break;
-    case TAM_KEY_DOWN:      kname = "Down"; break;
-    case TAM_KEY_LEFT:      kname = "Left"; break;
-    case TAM_KEY_RIGHT:     kname = "Right"; break;
-    case TAM_KEY_HOME:      kname = "Home"; break;
-    case TAM_KEY_END:       kname = "End"; break;
-    case TAM_KEY_PAGE_UP:   kname = "PageUp"; break;
-    case TAM_KEY_PAGE_DOWN: kname = "PageDown"; break;
-    case TAM_KEY_ENTER:     kname = "Enter"; break;
-    case TAM_KEY_TAB:       kname = "Tab"; break;
-    case TAM_KEY_BACKSPACE: kname = "Backspace"; break;
-    case TAM_KEY_INSERT:    kname = "Insert"; break;
-    case TAM_KEY_DELETE:    kname = "Delete"; break;
-    case TAM_KEY_ESC:       kname = "Escape"; break;
-    case TAM_KEY_CHAR:
-        if (cp == ' ') {
-            kname = "Space";
-        } else if (cp >= 33 && cp < 127) {
-            snprintf(ch_name, sizeof(ch_name), "%c", (char)cp);
-            kname = ch_name;
-        } else {
-            snprintf(ch_name, sizeof(ch_name), "U+%X", cp);
-            kname = ch_name;
-        }
-        break;
-    default:
-        if (type >= TAM_KEY_F1 && type <= TAM_KEY_F12) {
-            snprintf(ch_name, sizeof(ch_name), "F%d", (int)(type - TAM_KEY_F1 + 1));
-            kname = ch_name;
-        } else {
-            kname = "Unknown";
-        }
-        break;
-    }
-    snprintf(buf, buflen, "%s%s", prefix, kname);
+    tam_key_event_t ev = {.type = type, .codepoint = cp, .mods = mods};
+    (void)tam_key_name_format(&ev, buf, buflen);
 }
 
 typedef struct {

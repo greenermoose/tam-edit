@@ -15,7 +15,7 @@ STATE
   fork of micro, the Go version on master, branches c11 and test) is
   archived read-only at greenermoose/tam-edit-micro-fork. Commit hashes
   in older records, R1-cursor-movement.md included, are in that
-  archive. VERSION reads 1.1.1 (the footer shows it).
+  archive. VERSION reads 1.2.0 (the footer shows it).
 
   All five migration milestones are complete (ROADMAP.md, 1.0.0 on
   2026-11-13): editing, views and configuration, syntax highlighting,

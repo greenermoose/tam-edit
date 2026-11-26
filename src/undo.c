@@ -14,9 +14,7 @@ void editor_raw_remove(editor_t *ed, size_t line, size_t col, size_t runes);
 
 static int64_t get_time_ms(void)
 {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    return tam_monotonic_ms();
 }
 
 void undo_init(editor_t *ed)

@@ -23,32 +23,6 @@ void clipboard_free(void)
     g_internal_len = 0;
 }
 
-static char *base64_encode(const unsigned char *data, size_t input_len)
-{
-    static const char table[] =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-    size_t output_len = 4 * ((input_len + 2) / 3);
-    char *encoded = malloc(output_len + 1);
-    if (encoded == NULL) return NULL;
-
-    size_t i, j;
-    for (i = 0, j = 0; i < input_len;) {
-        size_t remaining = input_len - i;
-        uint32_t octet_a = i < input_len ? data[i++] : 0;
-        uint32_t octet_b = i < input_len ? data[i++] : 0;
-        uint32_t octet_c = i < input_len ? data[i++] : 0;
-
-        uint32_t triple = (octet_a << 16) | (octet_b << 8) | octet_c;
-
-        encoded[j++] = table[(triple >> 18) & 0x3F];
-        encoded[j++] = table[(triple >> 12) & 0x3F];
-        encoded[j++] = remaining < 2 ? '=' : table[(triple >> 6) & 0x3F];
-        encoded[j++] = remaining < 3 ? '=' : table[triple & 0x3F];
-    }
-    encoded[output_len] = '\0';
-    return encoded;
-}
 
 static bool console_clipboard(void)
 {
@@ -72,19 +46,17 @@ bool clipboard_set(const char *text, size_t len, int tty_fd)
 
     /* 2. OSC 52 sequence to the terminal */
     if (tty_fd >= 0) {
-        char *b64 = base64_encode((const unsigned char *)text, len);
-        if (b64 != NULL) {
-            tam_str_t osc = tam_str_new("\x1b]52;c;");
-            if (osc != NULL) {
-                osc = tam_str_cat(osc, b64);
-                osc = tam_str_cat(osc, "\x07");
-                if (osc != NULL) {
-                    ssize_t ignored = write(tty_fd, osc, tam_str_len(osc));
-                    (void)ignored;
-                }
-                tam_str_free(osc);
-            }
-            free(b64);
+        /* ESC ] 52 ; c ; <base64> BEL, written whole even when the terminal
+         * takes it in pieces. */
+        static const char head[] = "\x1b]52;c;";
+        size_t enc = tam_b64_encoded_len(len);
+        char *osc = malloc(sizeof(head) - 1 + enc + 2);
+        if (osc != NULL) {
+            memcpy(osc, head, sizeof(head) - 1);
+            tam_b64_encode(text, len, osc + sizeof(head) - 1);
+            osc[sizeof(head) - 1 + enc] = '\x07';
+            (void)tam_write_all(tty_fd, osc, sizeof(head) - 1 + enc + 1);
+            free(osc);
         }
     }
 

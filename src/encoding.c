@@ -5,46 +5,13 @@
 #include <iconv.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <tam_uni.h>
+
 #include <stdlib.h>
 #include <string.h>
 
 static bool utf8_validate(const char *s, size_t len) {
-    size_t i = 0;
-    while (i < len) {
-        uint8_t b0 = (uint8_t)s[i];
-        if (b0 <= 0x7F) {
-            i++;
-            continue;
-        }
-        if (b0 >= 0xC2 && b0 <= 0xDF) {
-            if (i + 1 >= len) return false;
-            uint8_t b1 = (uint8_t)s[i + 1];
-            if ((b1 & 0xC0) != 0x80) return false;
-            i += 2;
-        } else if (b0 >= 0xE0 && b0 <= 0xEF) {
-            if (i + 2 >= len) return false;
-            uint8_t b1 = (uint8_t)s[i + 1];
-            uint8_t b2 = (uint8_t)s[i + 2];
-            if ((b1 & 0xC0) != 0x80 || (b2 & 0xC0) != 0x80) return false;
-            if (b0 == 0xE0 && b1 < 0xA0) return false; /* overlong */
-            if (b0 == 0xED && b1 >= 0xA0) return false; /* surrogate D800-DFFF */
-            i += 3;
-        } else if (b0 >= 0xF0 && b0 <= 0xF4) {
-            if (i + 3 >= len) return false;
-            uint8_t b1 = (uint8_t)s[i + 1];
-            uint8_t b2 = (uint8_t)s[i + 2];
-            uint8_t b3 = (uint8_t)s[i + 3];
-            if ((b1 & 0xC0) != 0x80 || (b2 & 0xC0) != 0x80 || (b3 & 0xC0) != 0x80) {
-                return false;
-            }
-            if (b0 == 0xF0 && b1 < 0x90) return false; /* overlong */
-            if (b0 == 0xF4 && b1 > 0x8F) return false; /* > 0x10FFFF */
-            i += 4;
-        } else {
-            return false;
-        }
-    }
-    return true;
+    return tam_utf8_valid(s, len);
 }
 
 static void str_lower_trim(const char *in, char *out, size_t out_size) {
