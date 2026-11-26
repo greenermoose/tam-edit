@@ -169,7 +169,7 @@ buffer_t *buffer_open_with_encoding(const char *path, const char *configured_enc
                             b->encoding, sizeof(b->encoding));
 
     size_t len = 0;
-    char *data = tam_fs_read_file(path, &len);
+    char *data = tam_fs_read(path, 0, &len);
     if (data == NULL) {
         if (errno == ENOENT) {
             /* Missing file opens empty without error */
@@ -295,7 +295,7 @@ bool buffer_reopen(buffer_t *buf, const char *enc_override, int detectlimit,
     }
 
     size_t raw_len = 0;
-    char *raw = tam_fs_read_file(buf->path, &raw_len);
+    char *raw = tam_fs_read(buf->path, 0, &raw_len);
     if (!raw) {
         if (err_buf && err_size > 0) {
             snprintf(err_buf, err_size, "Cannot read '%s': %s", buf->path, strerror(errno));
@@ -432,7 +432,10 @@ bool buffer_save_with_opts(buffer_t *buf, bool rmtrailingws, bool eofnewline,
     }
     tam_str_free(out);
 
-    bool ok = tam_fs_write_atomic(buf->path, encoded, encoded_len, 0644);
+    /* Keep the file's permissions, and save through a symbolic link to the
+     * file it points to; a new file gets 0644. */
+    bool ok = tam_fs_write_atomic(buf->path, encoded, encoded_len,
+                                  TAM_FS_KEEP_MODE, 0644) >= 0;
     if (!ok && err_buf && err_size > 0) {
         snprintf(err_buf, err_size, "Error saving '%s': %s", buf->path, strerror(errno));
     }

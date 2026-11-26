@@ -34,7 +34,7 @@ static char *test_path(const char *name)
 
 static void write_file(const char *path, const char *data)
 {
-    CHECK(tam_fs_write_atomic(path, data, strlen(data), 0600));
+    CHECK(tam_fs_write_atomic(path, data, strlen(data), 0, 0600) == 0);
 }
 
 static void check_contents(editor_t *ed, const char *expected)
@@ -66,7 +66,7 @@ static void test_load_split(void)
 
     CHECK(editor_save(&ed));
     size_t len = 0;
-    char *data = tam_fs_read_file(path, &len);
+    char *data = tam_fs_read(path, 0, &len);
     CHECK(data != NULL && len == 8 && memcmp(data, "one\ntwo\n", 8) == 0);
     free(data);
 
@@ -87,7 +87,7 @@ static void test_no_trailing_newline(void)
     CHECK(editor_save(&ed));
 
     size_t len = 0;
-    char *data = tam_fs_read_file(path, &len);
+    char *data = tam_fs_read(path, 0, &len);
     CHECK(data != NULL && len == 3 && memcmp(data, "abc", 3) == 0);
     free(data);
 
@@ -111,7 +111,7 @@ static void test_crlf(void)
 
     CHECK(editor_save(&ed));
     size_t len = 0;
-    char *data = tam_fs_read_file(path, &len);
+    char *data = tam_fs_read(path, 0, &len);
     CHECK(data != NULL && len == 6 && memcmp(data, "a\r\nb\r\n", 6) == 0);
     free(data);
 
@@ -526,6 +526,39 @@ static void test_unicode_word_classes(void)
     printf("  [PASS] test_unicode_word_classes\n");
 }
 
+/* Saving keeps the file's permissions and writes through a symbolic link. */
+static void test_save_keeps_mode_and_link(void)
+{
+    char script[512];
+    snprintf(script, sizeof(script), "%s", test_path("script"));
+    write_file(script, "#!/bin/sh\necho hi\n");
+    CHECK(chmod(script, 0755) == 0);
+
+    editor_t ed;
+    editor_init(&ed);
+    CHECK(editor_load(&ed, script));
+    CHECK(editor_save(&ed));
+    struct stat st;
+    CHECK(stat(script, &st) == 0 && (st.st_mode & 0777) == 0755);
+    editor_free(&ed);
+
+    CHECK(chmod(script, 0600) == 0);
+    char link[600];
+    snprintf(link, sizeof(link), "%s.link", script);
+    unlink(link);
+    CHECK(symlink(script, link) == 0);
+    editor_init(&ed);
+    CHECK(editor_load(&ed, link));
+    CHECK(editor_save(&ed));
+    CHECK(lstat(link, &st) == 0 && S_ISLNK(st.st_mode));
+    CHECK(stat(script, &st) == 0 && (st.st_mode & 0777) == 0600);
+    editor_free(&ed);
+
+    unlink(link);
+    unlink(script);
+    printf("  [PASS] test_save_keeps_mode_and_link\n");
+}
+
 static void test_save_without_path(void)
 {
     editor_t ed;
@@ -568,6 +601,7 @@ int main(void)
     test_unicode_word_classes();
     test_vertical_goal();
     test_save_without_path();
+    test_save_keeps_mode_and_link();
     printf("editor tests passed\n\n");
 
     test_milestone1_run();

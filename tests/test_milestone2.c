@@ -184,7 +184,7 @@ static void test_tam_ini_config(void)
         "[bindings]\n"
         "Alt-w = togglelocal softwrap\n"
         "Ctrl-t = AddTab\n";
-    CHECK(tam_fs_write_atomic(ini_path, ini_content, strlen(ini_content), 0644));
+    CHECK(tam_fs_write_atomic(ini_path, ini_content, strlen(ini_content), 0, 0644) == 0);
 
     custom_keybind_t *kb = NULL;
     CHECK(config_load_file(ini_path, &cfg, &kb));
@@ -219,13 +219,13 @@ static void test_micro_importer_json5(void)
         "    \"Ctrl-t\": \"AddTab\",\n"
         "}\n";
 
-    CHECK(tam_fs_write_atomic(s_json, s_text, strlen(s_text), 0644));
-    CHECK(tam_fs_write_atomic(b_json, b_text, strlen(b_text), 0644));
+    CHECK(tam_fs_write_atomic(s_json, s_text, strlen(s_text), 0, 0644) == 0);
+    CHECK(tam_fs_write_atomic(b_json, b_text, strlen(b_text), 0, 0644) == 0);
 
     CHECK(config_import_micro(dir, out_ini, NULL));
 
     size_t len = 0;
-    char *res = tam_fs_read_file(out_ini, &len);
+    char *res = tam_fs_read(out_ini, 0, &len);
     CHECK(res != NULL);
     CHECK(strstr(res, "softwrap = true") != NULL);
     CHECK(strstr(res, "wordwrap = true") != NULL);

@@ -756,7 +756,7 @@ bool syntax_registry_load_yaml_file(const char *path, char *errbuf, size_t errle
 {
     if (path == NULL) return false;
     size_t len = 0;
-    char *data = tam_fs_read_file(path, &len);
+    char *data = tam_fs_read(path, 0, &len);
     if (data == NULL) {
         yaml_err(errbuf, errlen, "cannot read %s", path);
         return false;

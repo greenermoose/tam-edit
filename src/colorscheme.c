@@ -260,11 +260,11 @@ static bool parse_scheme_buffer(colorscheme_t *cs, const char *data,
                     size_t inc_len = 0;
                     if (parent_dir != NULL) {
                         snprintf(try_path, sizeof(try_path), "%s/%s.micro", parent_dir, inc_name);
-                        inc_data = tam_fs_read_file(try_path, &inc_len);
+                        inc_data = tam_fs_read(try_path, 0, &inc_len);
                     }
                     if (inc_data == NULL) {
                         snprintf(try_path, sizeof(try_path), "runtime/colorschemes/%s.micro", inc_name);
-                        inc_data = tam_fs_read_file(try_path, &inc_len);
+                        inc_data = tam_fs_read(try_path, 0, &inc_len);
                     }
                     if (inc_data != NULL) {
                         parse_scheme_buffer(cs, inc_data, parent_dir, new_seen, seen_count + 1);
@@ -291,7 +291,7 @@ bool colorscheme_load_file(colorscheme_t *cs, const char *path)
 {
     if (path == NULL) return false;
     size_t len = 0;
-    char *data = tam_fs_read_file(path, &len);
+    char *data = tam_fs_read(path, 0, &len);
     if (data == NULL) return false;
 
     char dir[512] = {0};

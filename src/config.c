@@ -877,7 +877,7 @@ bool config_import_micro(const char *micro_dir, const char *out_ini_path, FILE *
     char settings_json[512];
     snprintf(settings_json, sizeof(settings_json), "%s/settings.json", in_dir);
     size_t s_len = 0;
-    char *s_data = tam_fs_read_file(settings_json, &s_len);
+    char *s_data = tam_fs_read(settings_json, 0, &s_len);
     if (s_data != NULL) {
         kv_pair_t pairs[64];
         size_t n = parse_json5_pairs(s_data, pairs, 64);
@@ -902,7 +902,7 @@ bool config_import_micro(const char *micro_dir, const char *out_ini_path, FILE *
     char bindings_json[512];
     snprintf(bindings_json, sizeof(bindings_json), "%s/bindings.json", in_dir);
     size_t b_len = 0;
-    char *b_data = tam_fs_read_file(bindings_json, &b_len);
+    char *b_data = tam_fs_read(bindings_json, 0, &b_len);
     if (b_data != NULL) {
         kv_pair_t pairs[128];
         size_t n = parse_json5_pairs(b_data, pairs, 128);
@@ -925,15 +925,16 @@ bool config_import_micro(const char *micro_dir, const char *out_ini_path, FILE *
     char backup_path[540];
     snprintf(backup_path, sizeof(backup_path), "%s.bak", target_path);
     size_t existing_len = 0;
-    char *existing = tam_fs_read_file(target_path, &existing_len);
+    char *existing = tam_fs_read(target_path, 0, &existing_len);
     if (existing != NULL) {
-        tam_fs_write_atomic(backup_path, existing, existing_len, 0644);
+        (void)tam_fs_write_atomic(backup_path, existing, existing_len, TAM_FS_KEEP_MODE, 0644);
         fprintf(out, "Existing configuration backed up to '%s'.\n", backup_path);
         free(existing);
     }
 
     /* 4. Write new settings.ini */
-    bool ok = tam_fs_write_atomic(target_path, ini_out, tam_str_len(ini_out), 0644);
+    bool ok = tam_fs_write_atomic(target_path, ini_out, tam_str_len(ini_out),
+                                  TAM_FS_KEEP_MODE, 0644) >= 0;
     if (ok) {
         fprintf(out, "Successfully wrote '%s'.\n", target_path);
     } else {
@@ -962,7 +963,7 @@ static bool ini_update_entry(const char *section, const char *key, const char *v
     free(cfg_dir);
 
     size_t len = 0;
-    char *existing = tam_fs_read_file(ini_path, &len);
+    char *existing = tam_fs_read(ini_path, 0, &len);
     tam_str_t out = tam_str_new("");
     if (!out) {
         free(existing);
@@ -1047,7 +1048,7 @@ static bool ini_update_entry(const char *section, const char *key, const char *v
         out = tam_str_cat_printf(out, "%s = %s\n", key, value);
     }
 
-    bool ok = tam_fs_write_atomic(ini_path, out, tam_str_len(out), 0644);
+    bool ok = tam_fs_write_atomic(ini_path, out, tam_str_len(out), TAM_FS_KEEP_MODE, 0644) >= 0;
     tam_str_free(out);
     return ok;
 }

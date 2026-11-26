@@ -158,7 +158,7 @@ static void test_encodings_roundtrip(void)
     char raw_u16le[] = { '\xFF', '\xFE', 'H', 0, 'i', 0, '\n', 0 };
     char path[256];
     snprintf(path, sizeof(path), "/tmp/tam-edit-enc-u16-%ld.txt", (long)getpid());
-    CHECK(tam_fs_write_atomic(path, raw_u16le, sizeof(raw_u16le), 0644));
+    CHECK(tam_fs_write_atomic(path, raw_u16le, sizeof(raw_u16le), 0, 0644) == 0);
 
     buffer_t *b = buffer_open_with_encoding(path, "utf-8", 100);
     CHECK(b != NULL);
@@ -172,7 +172,7 @@ static void test_encodings_roundtrip(void)
     /* Non-UTF8 latin1 fallback + unrepresentable save refusal */
     const unsigned char raw_lat1[] = { 'c', 'a', 'f', 0xE9, '\n' };
     snprintf(path, sizeof(path), "/tmp/tam-edit-enc-lat1-%ld.txt", (long)getpid());
-    CHECK(tam_fs_write_atomic(path, raw_lat1, sizeof(raw_lat1), 0644));
+    CHECK(tam_fs_write_atomic(path, raw_lat1, sizeof(raw_lat1), 0, 0644) == 0);
 
     editor_t ed;
     editor_init(&ed);
@@ -188,7 +188,7 @@ static void test_encodings_roundtrip(void)
 
     /* Disk file still untouched */
     size_t disk_len = 0;
-    char *disk = tam_fs_read_file(path, &disk_len);
+    char *disk = tam_fs_read(path, 0, &disk_len);
     CHECK(disk != NULL && disk_len == sizeof(raw_lat1));
     CHECK(memcmp(disk, raw_lat1, sizeof(raw_lat1)) == 0);
     free(disk);
@@ -445,7 +445,7 @@ static void test_shell_commands_and_completion(void)
     char err[192] = "";
     CHECK(editor_save_to_configured(&ed, file_path, err, sizeof(err)));
     size_t flen = 0;
-    char *fdata = tam_fs_read_file(file_path, &flen);
+    char *fdata = tam_fs_read(file_path, 0, &flen);
     CHECK(fdata != NULL && strcmp(fdata, "hello\n") == 0);
     free(fdata);
     unlink(file_path);

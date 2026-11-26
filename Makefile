@@ -16,6 +16,10 @@ export PKG_CONFIG_PATH := $(HOME)/.local/dev/lib/pkgconfig:$(PREFIX)/lib/pkgconf
 # libtam is the only library dependency.
 LIBTAM_CFLAGS := $(shell $(PKG_CONFIG) --cflags libtam 2>/dev/null)
 LIBTAM_LIBS   := $(shell $(PKG_CONFIG) --libs libtam 2>/dev/null)
+# libtam 0.10.0 or later; the archive is a prerequisite so a libtam rebuild
+# relinks tam-edit.
+LIBTAM_OK     := $(shell $(PKG_CONFIG) --atleast-version=0.10.0 libtam 2>/dev/null && echo yes)
+LIBTAM_ARCHIVE := $(wildcard $(shell $(PKG_CONFIG) --variable=libdir libtam 2>/dev/null)/libtam.a)
 
 BUILD = build
 BIN = $(BUILD)/tam-edit
@@ -37,15 +41,18 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 $(BUILD)/%.o: src/%.c Makefile | $(BUILD)
-	@test -n "$(LIBTAM_LIBS)" || { \
-		echo "tam-edit: libtam not found; add its pkg-config directory to PKG_CONFIG_PATH" >&2; \
+	@test -n "$(LIBTAM_OK)" || { \
+		echo "tam-edit: libtam 0.10.0 or later not found; add its pkg-config directory to PKG_CONFIG_PATH" >&2; \
 		exit 1; }
 	$(CC) $(CFLAGS) $(LIBTAM_CFLAGS) -MMD -MP -c $< -o $@
+
+# The version is compiled into these two.
+$(BUILD)/main.o $(BUILD)/render.o: VERSION
 
 $(BUILD)/data_%.o: data/%.c Makefile | $(BUILD)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-$(BIN): $(OBJS) $(DATA_OBJS)
+$(BIN): $(OBJS) $(DATA_OBJS) $(LIBTAM_ARCHIVE)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) $(DATA_OBJS) $(LIBTAM_LIBS) -o $@
 
 gen-data:
