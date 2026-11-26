@@ -562,7 +562,7 @@ int main(int argc, char **argv)
             }
 
             if (ctrl_backspace && byte == 0x08 && tam_key_pending(&keys) == 0) {
-                tam_key_event_t ev = {TAM_KEY_BACKSPACE, 0, TAM_MOD_CTRL};
+                tam_key_event_t ev = {.type = TAM_KEY_BACKSPACE, .mods = TAM_MOD_CTRL};
                 if (ed.prompt.active) prompt_handle_key(&ed, &ev);
                 else actions_handle_key(&ed, &ev, render_text_rows(&tty));
                 b_idx++;

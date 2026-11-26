@@ -1,0 +1,32 @@
+W10 LIBTAM 0.12.0 (TAM-EDIT 1.1.2)
+
+Date: 2026-11-26
+AI harness: Claude Code 2.1.332
+AI model: claude-opus-5-5
+Continues: W9
+
+
+GUIDANCE
+
+  Fred: "Do 0.12.0" (libtam's terminal stack).
+
+
+DONE
+
+  - libtam 0.12.0 adds paste and mouse fields to tam_key_event_t, so the
+    two positional initialisers in main.c and actions.c warned under
+    -Wextra. They are designated initialisers now; no behaviour changes.
+  - make test passes against libtam 0.12.0; the build has no warnings.
+
+
+FAILED
+
+  - Nothing.
+
+
+HANDOFF
+
+  - libtam 0.12.0 can replace tam-edit's own paste filter and SGR mouse
+    parser (main.c), its suspend code (main.c, shell.c), its key-name
+    parser and formatter (config.c) and its OSC 52 base64 (clipboard.c).
+    That is tam-edit's migration slice in libtam's plans/P1.

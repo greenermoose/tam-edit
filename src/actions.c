@@ -696,8 +696,9 @@ void actions_open_keybindings_help(editor_t *ed)
 
     out = tam_str_cat(out, "## Default Keybindings\n\n");
     for (size_t i = 0; g_keybindings[i].action != NULL; i++) {
-        tam_key_event_t key = {g_keybindings[i].type, g_keybindings[i].codepoint,
-                               g_keybindings[i].mods};
+        tam_key_event_t key = {.type = g_keybindings[i].type,
+                               .codepoint = g_keybindings[i].codepoint,
+                               .mods = g_keybindings[i].mods};
         if (actions_lookup_key_description(ed, &key) != g_keybindings[i].action) continue;
         char kbuf[64];
         keybind_format_string(g_keybindings[i].type, g_keybindings[i].codepoint,
