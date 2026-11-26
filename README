@@ -93,6 +93,7 @@ WHERE THINGS ARE
   tools/                helper and converter scripts (pull-references)
   docs/                 parity audit and man page
   arch/                 architecture notes (tam-edit.md)
+  keys/                 keybinding specification (tam-idol standard)
   bugs/                 defect records
   ideas/                ideas from reference projects (micro.md, sources)
   plans/                phase work plans

@@ -3,7 +3,7 @@ WHATNOW
 What tam-edit is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-25, with W7
+Updated: 2026-11-25, with W8
 
 
 STATE
@@ -35,7 +35,7 @@ STATE
 
   W7 adopts the Tamlinux default key map, named action palette, and
   Linux console fallbacks. The editor keeps the existing INI binding
-  format. See arch/keys.md.
+  format. See keys/keybindings.md (moved from arch/keys.md in W8).
 
 NEXT
 

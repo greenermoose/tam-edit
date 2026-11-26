@@ -1,0 +1,8 @@
+KEYBINDINGS
+
+This folder holds the keybinding specification for tam-edit, following
+the Tamlinux keybinding standard (tam-idol/keys/keybindings.md).
+
+IN THIS REPOSITORY
+
+  keybindings.md   tam-edit keybindings following tam-idol/keys/keybindings.md

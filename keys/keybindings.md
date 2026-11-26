@@ -1,6 +1,6 @@
 # tam-edit keybindings
 
-The editor follows the [Tamlinux keybinding standard](https://github.com/greenermoose/tamlinux/blob/dev/arch/keybindings.md).
+The editor follows the [Tamlinux keybinding standard](https://github.com/greenermoose/tam-idol/blob/dev/keys/keybindings.md).
 
 - Ctrl+N creates an untitled tab. Ctrl+D closes the active split or tab
   and leaves an untitled buffer when closing the last document.
