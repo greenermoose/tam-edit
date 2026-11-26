@@ -1,4 +1,4 @@
-# tam-edit C11 migration roadmap
+# tam-edit C17 migration roadmap
 
 **Last update:** 2026-11-13
 **Owner:** Fred
@@ -6,14 +6,14 @@
 **Target branch:** `dev` in `greenermoose/tam-edit` (was `c11` until the repository started fresh on 2026-11-18; the old history is archived at `greenermoose/tam-edit-micro-fork`)
 **Starting point:** the Go tam-edit fork at commit `85beac1e` (micro 2.0.15 lineage)
 
-This roadmap describes how tam-edit moves from Go to C11 and links only
+This roadmap describes how tam-edit moves from Go to C17 and links only
 `libtam` and libc. It is milestone-based, not date-based. The Go version stays
 usable on `master` until the C version reaches the 1.0.0 parity gate.
 
 ## Status
 
 **2026-11-13 — version 1.0.0 (Milestone 5 exit: parity gate, stabilization & packaging).**
-Phase 7 completes the C11 migration and satisfies the Section 10 definition of done:
+Phase 7 completes the C17 migration and satisfies the Section 10 definition of done:
 - Parity audit & fixes (`docs/PARITY_AUDIT.md`, `src/editor.c`, `src/actions.c`, `src/main.c`):
   complete audit of commands, settings, default keybindings, and CLI flags with
   intentional v1 omissions documented; fixed `editor_raw_insert` trailing-newline
@@ -32,7 +32,7 @@ Phase 7 completes the C11 migration and satisfies the Section 10 definition of d
   10k-line keystroke `0.03 ms` (`<= 50 ms`), 10k-line `VmHWM` `4.81 MB` (`<= 15 MB`).
 
 **2026-11-13 — version 0.4.0 (Milestone 4 exit: full editing, search, encodings, shell & multi-cursor).**
-Phase 6 delivers the full non-plugin micro feature set in C11 while linking only
+Phase 6 delivers the full non-plugin micro feature set in C17 while linking only
 libc and libtam 0.7.0:
 - Regex captures & search/replace (`src/regex.{h,c}`, `src/search.{h,c}`):
   `(...)` and `(?P<name>...)` capture groups, `$0`/`$1`/`${1}`/`$name`/`${name}`/`$$`
@@ -180,8 +180,8 @@ is complete and the version stays in 0.0.x.
 
 ## 1. Goal and non-goals
 
-**Goal.** A native C11 tam-edit that provides micro's core editing experience,
-builds with a C11 compiler, `make`, `pkg-config` and `libtam`, and links no
+**Goal.** A native C17 tam-edit that provides micro's core editing experience,
+builds with a C17 compiler, `make`, `pkg-config` and `libtam`, and links no
 other library. The finished binary needs only libc at run time.
 
 "Core editing experience" means buffers, multiple cursors, selections, undo,
@@ -208,14 +208,14 @@ Deferred work is listed in section 9, not dropped.
 | Implementation style | Idiomatic C with micro's behavior and data, not a mechanical package translation |
 | libtam boundary | libtam grows terminal, input, Unicode and regex modules; the editor, renderer and actions stay in tam-edit |
 | Configuration | Native INI through `tam_ini`, plus a one-time importer for micro settings |
-| Repository | C11 tree on a `c11` branch; `master` stays the Go fork for upstream sync and parity reference |
+| Repository | C17 tree on a `c11` branch; `master` stays the Go fork for upstream sync and parity reference |
 | License | GPLv3 for the linked work, retaining micro's MIT copyright and permission notices |
 | Roadmap location | `~/Code/tam-edit` (the existing clone) |
 | Versioning | Semver; the minor names a milestone while pre-1.0, and 1.0.0 is the parity gate. See "Milestones and versions" in section 6 |
 
 ## 3. Starting point
 
-Measured from the Go tree before any C11 work:
+Measured from the Go tree before any C17 work:
 
 | Item | Size |
 | --- | --- |
@@ -336,7 +336,7 @@ pulling in editor code. Each ships with tests, sanitizer coverage and fuzzing.
 
 ## 5. Dependency elimination
 
-| Go dependency | Used for | C11 replacement | Phase |
+| Go dependency | Used for | C17 replacement | Phase |
 | --- | --- | --- | --- |
 | `micro-editor/tcell` | Terminal, input, rendering | `tam_tty`, `tam_key`, `tam-edit` renderer | 1–3 |
 | Go `regexp` | Syntax and search | `tam_regex` | 1, 5 |
@@ -576,7 +576,7 @@ blocking calls in the event loop, and every external command has a deadline.
 
 The migration is complete when all of the following hold:
 
-- `make` succeeds with a C11 compiler, `make`, `pkg-config` and libtam only.
+- `make` succeeds with a C17 compiler, `make`, `pkg-config` and libtam only.
 - `ldd tam-edit` reports libc alone; `make check-deps` enforces it.
 - Core editing works without Lua, ncurses, a VT emulator or any external
   program.

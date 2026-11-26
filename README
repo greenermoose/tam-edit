@@ -1,12 +1,12 @@
 TAM-EDIT
 
-tam-edit is a terminal text editor written in C11 that links only libtam
+tam-edit is a terminal text editor written in C17 that links only libtam
 (https://github.com/greenermoose/libtam) and the C library. It reproduces
 micro (https://github.com/micro-editor/micro): it began as a fork of
 micro, and micro's behaviour, documentation and runtime files remain its
 reference.
 
-The repository started fresh on 2026-11-18 from the C11 editor at 1.0.4,
+The repository started fresh on 2026-11-18 from the C17 editor at 1.0.4,
 without micro's Git history. The old history, including the Go version
 of tam-edit on its master branch, is archived read-only at
 greenermoose/tam-edit-micro-fork
@@ -58,16 +58,16 @@ WHAT TAM-EDIT CHANGES FROM MICRO
   which still works because it describes the terminal rather than the
   configuration.
 - Go-reference Lua plugins may import tam-edit/* as well as micro/*.
-- The reference toolchain is pinned in mise.toml; Go is optional for C11
+- The reference toolchain is pinned in mise.toml; Go is optional for C17
   work.
-- The C11 editor is C only and leaves out Go, tcell, Lua plugins,
+- The C17 editor is C only and leaves out Go, tcell, Lua plugins,
   the plugin manager and the embedded terminal, which are v1 non-goals in
   ROADMAP.md.
 
 
 BUILDING
 
-Requires a C11 compiler, make, pkg-config and libtam 0.7.0 or later.
+Requires a C17 compiler, make, pkg-config and libtam 0.7.0 or later.
 
   make                 # build/tam-edit
   make test            # unit tests
@@ -86,7 +86,7 @@ pages remain in runtime/ alongside the embedded tables in data/.
 
 WHERE THINGS ARE
 
-  src/                  C11 editor source
+  src/                  C17 editor source
   data/                 embedded syntax, colorscheme and help tables
   runtime/              micro syntax, colorscheme and help source files
   tests/                unit, buffer, stress, PTY and fuzz tests
@@ -110,7 +110,7 @@ WHERE THINGS ARE
 
 LICENSE
 
-The C11 editor uses GPLv3, as recorded in ROADMAP.md, with the full text in
+The C17 editor uses GPLv3, as recorded in ROADMAP.md, with the full text in
 LICENSE. libtam (https://github.com/greenermoose/libtam) also uses GPLv3.
 micro's MIT permission notice is kept in LICENSE-MIT and covers the
 runtime data and the other parts that come from micro; LICENSE-THIRD-PARTY

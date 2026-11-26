@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmark tam-edit (C11) against /usr/bin/micro on ROADMAP Section 8 targets."""
+"""Benchmark tam-edit (C17) against /usr/bin/micro on ROADMAP Section 8 targets."""
 
 import fcntl
 import os

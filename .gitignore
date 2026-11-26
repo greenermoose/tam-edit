@@ -1,4 +1,4 @@
-# C11 build output
+# C17 build output
 /build/
 
 # Go builds drop the binary in the repository root

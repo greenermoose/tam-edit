@@ -2,7 +2,7 @@ CC ?= cc
 PKG_CONFIG ?= pkg-config
 
 CFLAGS ?= -O2 -Wall -Wextra -Wpedantic
-override CFLAGS += -std=c11 -g -Isrc -Idata -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+override CFLAGS += -std=c17 -g -Isrc -Idata -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
 	-DTAM_EDIT_VERSION=\"$(VERSION)\"
 LDFLAGS ?=
 

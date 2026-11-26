@@ -3,7 +3,7 @@
 This file lists every piece of code tam-edit takes from another project.
 An idea taken without its code goes in `ideas/`, not here.
 
-The C11 editor in `src/` is written from scratch in C11 and links only
+The C17 editor in `src/` is written from scratch in C17 and links only
 `libtam` and the C library. The runtime data files and embedded tables
 below come from `micro`.
 
@@ -20,7 +20,7 @@ below come from `micro`.
   and the generated C tables `data/syntax_data.[ch]`,
   `data/colorschemes_data.[ch]`, and `data/help_data.[ch]`
 - **Changes:** Converted into embedded C tables by maintainer scripts in
-  `tools/` so the C11 editor runs without Go or external runtime packs;
+  `tools/` so the C17 editor runs without Go or external runtime packs;
   original MIT notices are preserved in `LICENSE-MIT` and
   `LICENSE-THIRD-PARTY`.
 - **Taken:** 2026-11-12 (carried into the fresh repository on 2026-11-18)

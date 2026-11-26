@@ -104,7 +104,7 @@ static bool run_iconv(const char *to_enc, const char *from_enc,
         used = prepend_len;
     }
 
-    /* Make a mutable copy if non-empty so iconv's char ** parameter stays strict C11 */
+    /* Make a mutable copy if non-empty so iconv's char ** parameter stays strict C17 */
     char *in_copy = NULL;
     if (in_len > 0) {
         in_copy = malloc(in_len);
