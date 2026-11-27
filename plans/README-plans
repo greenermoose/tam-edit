@@ -42,6 +42,8 @@ KEEPING PLANS CURRENT
 
 IN THIS REPOSITORY
 
-  ROADMAP.md holds the milestones and semver plan for the 1.0.0
-  migration phases (completed 2026-11-13). No P<n> plan files have been
-  created yet; future post-1.0 work phases go here.
+  P1-c17-foundation.md     0.0.1 to 0.1.0: C17 scaffold and usable editor
+  P2-views-and-syntax.md   0.2.0 to 0.3.0: splits, tabs, INI, syntax
+  P3-parity-and-v1.md      0.4.0 to 1.0.0: full editing, audit, v1.0.0
+  P4-libtam-and-polish.md  1.0.4 to 1.2.0: R1 fixes, keys, libtam
+  P5-post-v1-extensions.md 1.3.0+: deferred post-v1 extensions
